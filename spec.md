@@ -1,47 +1,38 @@
 # HYVEIL
 
 ## Current State
-- Full ICP portal app with Internet Identity auth, wallet, privacy proxy, partner canister factory, and admin creator template preview page
-- Backend: partner registry, video metadata, proxy outcalls, authorization mixin
-- Partners can register, pay 0.5 ICP, deploy their own canister channel (permissionless)
-- Admin-only `/admin/creator-template` page shows Instagram/Reels-like preview with video upload
-- No revenue tracking or split logic exists yet
-- No creator dashboard showing multi-channel management
+- AdminCreatorTemplate page: Instagram/Reels-like full-page admin template preview with video upload, autoplay, likes, comments, monetization toggle.
+- Creator tab (App.tsx): Accounting dashboard showing total earnings, HYVEIL commission, purchase count, and per-channel cards with revenue stats.
+- No transaction history, followers, or channel performance metrics anywhere.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Revenue tracking** in backend: `ContentItem` type (id, partnerId, title, type, price in e8s), `PurchaseRecord` (buyer, contentId, amount, creatorShare, hyVeilShare, timestamp)
-- **`purchaseContent(contentId)`** backend method: records payment, auto-splits 90% to creator's revenue ledger, 10% to HYVEIL treasury ledger (on-chain tracking)
-- **`getPartnerRevenue(partnerId)`** — returns total earned, creator's 90% share, HYVEIL's 10% share for a specific partner
-- **`getAllPartnersRevenue()`** — admin only, returns platform-wide revenue summary
-- **`getMyChannelsRevenue()`** — returns revenue data for all channels owned by caller principal
-- **`addContentItem(input)`** — partner owner adds a content item to their channel with price and monetization type
-- **`getContentItems(partnerId)`** — returns content listings for a partner channel
-- **`setMonetizationModel(partnerId, model)`** — toggle between #payPerView and #subscription per channel
-- **Creator Dashboard page** (`/creator-dashboard`): full-page route accessible to any logged-in user who has deployed at least one channel
-  - Header: "My Creator Channels" with total earnings summary card
-  - Per-channel cards: canister ID, channel name, status, monetization model toggle, revenue breakdown (total / 90% yours / 10% platform)
-  - "Manage Channel" button linking to `https://<canisterId>.icp0.io`
-  - "Add Content" modal: title, description, price (ICP), type (pay-per-view / subscription)
-  - Revenue chart (bar or line) showing earnings over time per channel
-- **HYVEIL Admin Revenue Section** on main dashboard: platform-wide 10% commission total, number of active channels, top earning partners
-- **Navigation entry**: "Creator" tab or link in main nav visible only to logged-in users with at least one channel
+- **AdminCreatorTemplate page** — Three new sections accessible via sub-tabs inside the page:
+  1. `Transactions` tab: per-channel transaction history table (buyer principal, content title, amount paid, creator share 90%, HYVEIL share 10%, timestamp). Seeded with realistic mock data.
+  2. `Followers` tab: follower list per channel — avatar placeholder, truncated principal, follow date, subscription status badge. Stats card at top showing total followers.
+  3. `Performance` tab: channel performance metrics — views chart (bar), top content list ranked by views/revenue, engagement rate, average watch time cards.
+- **Creator tab (App.tsx)** — Accounting dashboard enhancements:
+  - Full transaction history table (all channels combined) with channel name column, pagination or scroll.
+  - Channel list with canister ID, status, revenue per channel as rows.
+  - Follower totals per channel in the channel card.
 
 ### Modify
-- `PartnerRecord` — add `monetizationModel: {#payPerView; #subscription}` and `totalRevenue: Nat` fields
-- Admin creator template preview page — add a "Monetization Settings" panel showing the revenue split (90/10), pricing input, and monetization toggle
-- Main dashboard revenue widget — replace placeholder stats with real platform revenue from `getAllPartnersRevenue()`
+- AdminCreatorTemplate: Add sub-tab navigation (Reels | Transactions | Followers | Performance) at the top of the page.
+- Creator tab channel cards: Add follower count badge and link to channel performance.
 
 ### Remove
-- Nothing removed
+- Nothing removed.
 
 ## Implementation Plan
-1. Add `ContentItem`, `PurchaseRecord` types and storage maps to backend
-2. Add `purchaseContent`, `addContentItem`, `getContentItems`, `getPartnerRevenue`, `getMyChannelsRevenue`, `getAllPartnersRevenue`, `setMonetizationModel` backend functions
-3. Update `PartnerRecord` to include monetization model and revenue totals
-4. Regenerate `backend.d.ts` bindings
-5. Build `/creator-dashboard` React page with per-channel revenue cards, earnings summary, add-content modal, and monetization toggle
-6. Add "Creator" nav entry (visible only when user has channels)
-7. Update admin dashboard revenue section to show real platform 10% commission
-8. Update admin creator template preview to show monetization settings panel
+1. Update `AdminCreatorTemplate.tsx`:
+   - Add `activeSection` state: 'reels' | 'transactions' | 'followers' | 'performance'
+   - Add sub-tab nav row at top (below header)
+   - Add mock transaction data (10 entries), mock follower data (15 followers), mock performance data
+   - Build Transactions section: table with columns (Buyer, Content, Amount, Creator Share, HYVEIL Cut, Time)
+   - Build Followers section: stats card + follower list rows
+   - Build Performance section: stats cards (views, followers, revenue, engagement) + top content table + simple bar chart using CSS
+2. Update `App.tsx` Creator tab:
+   - Add full transaction history table below channel cards (combined, all channels)
+   - Add follower count to each channel card row
+   - Make channel list more structured with a clear list view

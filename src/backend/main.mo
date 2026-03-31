@@ -1,4 +1,4 @@
-import Migration "migration";
+
 import OutCall "http-outcalls/outcall";
 import Map "mo:core/Map";
 import Array "mo:core/Array";
@@ -14,7 +14,7 @@ import MixinStorage "blob-storage/Mixin";
 import Storage "blob-storage/Storage";
 
 // Data migration with-clause
-(with migration = Migration.run)
+
 actor {
   // Authorization system setup
   let accessControlState = AccessControl.initState();

@@ -2620,6 +2620,123 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Channel list table */}
+                <div
+                  className="glass-card rounded-2xl overflow-hidden"
+                  data-ocid="creator.channels.table"
+                >
+                  <div className="p-5 border-b border-white/[0.06]">
+                    <h3 className="font-display font-semibold text-foreground">
+                      My Channels
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      All deployed creator channels
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-white/[0.06] text-xs text-muted-foreground">
+                          <th className="text-left px-5 py-3 font-medium">
+                            Channel Name
+                          </th>
+                          <th className="text-left px-4 py-3 font-medium">
+                            Canister ID
+                          </th>
+                          <th className="text-left px-4 py-3 font-medium">
+                            Status
+                          </th>
+                          <th className="text-right px-4 py-3 font-medium">
+                            Total Revenue
+                          </th>
+                          <th className="text-right px-4 py-3 font-medium">
+                            Followers
+                          </th>
+                          <th className="text-right px-4 py-3 font-medium">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {myChannels.map((ch, idx) => {
+                          const cidStr = ch.canisterId.toString();
+                          const shortCid = `${cidStr.slice(0, 8)}...${cidStr.slice(-4)}`;
+                          const mockFollowers = Math.floor(100 + idx * 37 + 12);
+                          return (
+                            <tr
+                              key={cidStr}
+                              className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
+                              data-ocid={`creator.channels.row.item.${idx + 1}`}
+                            >
+                              <td className="px-5 py-3 font-medium text-foreground">
+                                {ch.partnerName}
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono text-xs text-muted-foreground">
+                                    {shortCid}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(cidStr);
+                                      toast.success("Canister ID copied!");
+                                    }}
+                                    className="text-white/30 hover:text-white/60"
+                                    data-ocid={`creator.channels.secondary_button.${idx + 1}`}
+                                  >
+                                    <Copy className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span
+                                  className="text-xs px-2 py-0.5 rounded-full font-medium"
+                                  style={{
+                                    background: "rgba(16,185,129,0.15)",
+                                    color: "#10b981",
+                                    border: "1px solid rgba(16,185,129,0.3)",
+                                  }}
+                                >
+                                  Active
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right font-mono text-amber-400 text-xs">
+                                {e8sToIcp(ch.totalRevenue)} ICP
+                              </td>
+                              <td className="px-4 py-3 text-right text-xs text-muted-foreground">
+                                <div className="flex items-center justify-end gap-1">
+                                  <Users className="w-3 h-3" />
+                                  {mockFollowers}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="glass border-white/10 text-xs h-7"
+                                    onClick={() =>
+                                      window.open(
+                                        `https://${cidStr}.icp0.io`,
+                                        "_blank",
+                                      )
+                                    }
+                                    data-ocid={`creator.channels.button.${idx + 1}`}
+                                  >
+                                    <ExternalLink className="w-3 h-3 mr-1" />{" "}
+                                    Manage
+                                  </Button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
                 {/* Per-channel cards */}
                 <div className="space-y-4">
                   {myChannels.map((ch, idx) => {
@@ -2729,7 +2846,7 @@ export default function App() {
                         </div>
 
                         {/* Revenue breakdown */}
-                        <div className="grid grid-cols-3 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                           <div
                             className="text-center p-3 rounded-xl"
                             style={{ background: "rgba(255,255,255,0.03)" }}
@@ -2767,6 +2884,17 @@ export default function App() {
                               style={{ color: "#8b5cf6" }}
                             >
                               {e8sToIcp(ch.hyveilShare)} ICP
+                            </p>
+                          </div>
+                          <div
+                            className="text-center p-3 rounded-xl"
+                            style={{ background: "rgba(255,255,255,0.03)" }}
+                          >
+                            <p className="text-xs text-muted-foreground mb-1">
+                              Followers
+                            </p>
+                            <p className="text-sm font-bold text-foreground">
+                              👥 {Math.floor(100 + idx * 37 + 12)}
                             </p>
                           </div>
                         </div>
@@ -2875,6 +3003,184 @@ export default function App() {
                     );
                   })}
                 </div>
+                {/* Transaction History */}
+                {(() => {
+                  const CREATOR_MOCK_TXS = [
+                    {
+                      channel: myChannels[0]?.partnerName ?? "Channel 1",
+                      buyer: "2vxsx-fae",
+                      content: "Morning Workout Vol.1",
+                      amount: 0.5,
+                      creatorShare: 0.45,
+                      hyveilCut: 0.05,
+                      date: "Mar 30, 2026",
+                    },
+                    {
+                      channel: myChannels[0]?.partnerName ?? "Channel 1",
+                      buyer: "rdmx6-jaaaa",
+                      content: "City Life Ep.3",
+                      amount: 1.2,
+                      creatorShare: 1.08,
+                      hyveilCut: 0.12,
+                      date: "Mar 29, 2026",
+                    },
+                    {
+                      channel: myChannels[1]?.partnerName ?? "Channel 2",
+                      buyer: "aaaaa-aa",
+                      content: "Sunset Vibes",
+                      amount: 0.8,
+                      creatorShare: 0.72,
+                      hyveilCut: 0.08,
+                      date: "Mar 28, 2026",
+                    },
+                    {
+                      channel: myChannels[0]?.partnerName ?? "Channel 1",
+                      buyer: "rrkah-fqaaa",
+                      content: "Tech Talk #5",
+                      amount: 2.0,
+                      creatorShare: 1.8,
+                      hyveilCut: 0.2,
+                      date: "Mar 27, 2026",
+                    },
+                    {
+                      channel: myChannels[1]?.partnerName ?? "Channel 2",
+                      buyer: "qoctq-giaaa",
+                      content: "Night Run",
+                      amount: 0.75,
+                      creatorShare: 0.675,
+                      hyveilCut: 0.075,
+                      date: "Mar 26, 2026",
+                    },
+                    {
+                      channel: myChannels[0]?.partnerName ?? "Channel 1",
+                      buyer: "gvbup-yiaaa",
+                      content: "Street Art Tour",
+                      amount: 1.5,
+                      creatorShare: 1.35,
+                      hyveilCut: 0.15,
+                      date: "Mar 24, 2026",
+                    },
+                    {
+                      channel: myChannels[1]?.partnerName ?? "Channel 2",
+                      buyer: "2vxsx-fae",
+                      content: "Cooking at Home",
+                      amount: 0.6,
+                      creatorShare: 0.54,
+                      hyveilCut: 0.06,
+                      date: "Mar 22, 2026",
+                    },
+                    {
+                      channel: myChannels[0]?.partnerName ?? "Channel 1",
+                      buyer: "rdmx6-jaaaa",
+                      content: "Morning Workout Vol.2",
+                      amount: 0.5,
+                      creatorShare: 0.45,
+                      hyveilCut: 0.05,
+                      date: "Mar 20, 2026",
+                    },
+                    {
+                      channel: myChannels[1]?.partnerName ?? "Channel 2",
+                      buyer: "aaaaa-aa",
+                      content: "City Life Ep.4",
+                      amount: 1.2,
+                      creatorShare: 1.08,
+                      hyveilCut: 0.12,
+                      date: "Mar 18, 2026",
+                    },
+                    {
+                      channel: myChannels[0]?.partnerName ?? "Channel 1",
+                      buyer: "rrkah-fqaaa",
+                      content: "Tech Talk #6",
+                      amount: 2.0,
+                      creatorShare: 1.8,
+                      hyveilCut: 0.2,
+                      date: "Mar 15, 2026",
+                    },
+                  ];
+                  return (
+                    <div
+                      className="glass-card rounded-2xl overflow-hidden"
+                      data-ocid="creator.transactions.table"
+                    >
+                      <div className="p-5 border-b border-white/[0.06]">
+                        <h3 className="font-display font-semibold text-foreground">
+                          Transaction History — All Channels
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Complete record of all purchases and revenue splits
+                        </p>
+                      </div>
+                      <div
+                        className="overflow-x-auto"
+                        style={{ maxHeight: 400, overflowY: "auto" }}
+                      >
+                        <table className="w-full text-sm">
+                          <thead
+                            style={{
+                              position: "sticky",
+                              top: 0,
+                              background: "var(--background)",
+                              zIndex: 1,
+                            }}
+                          >
+                            <tr className="border-b border-white/[0.06] text-xs text-muted-foreground">
+                              <th className="text-left px-5 py-3 font-medium">
+                                Channel
+                              </th>
+                              <th className="text-left px-4 py-3 font-medium">
+                                Buyer
+                              </th>
+                              <th className="text-left px-4 py-3 font-medium">
+                                Content
+                              </th>
+                              <th className="text-right px-4 py-3 font-medium">
+                                Amount
+                              </th>
+                              <th className="text-right px-4 py-3 font-medium">
+                                Creator Share
+                              </th>
+                              <th className="text-right px-4 py-3 font-medium">
+                                HYVEIL Cut
+                              </th>
+                              <th className="text-right px-4 py-3 font-medium">
+                                Date
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {CREATOR_MOCK_TXS.map((tx, i) => (
+                              <tr
+                                key={`${tx.channel}-${tx.content}-${i}`}
+                                className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
+                                data-ocid={`creator.transactions.row.item.${i + 1}`}
+                              >
+                                <td className="px-5 py-3 text-xs font-medium text-violet-400">
+                                  {tx.channel}
+                                </td>
+                                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{`${tx.buyer.slice(0, 5)}...${tx.buyer.slice(-4)}`}</td>
+                                <td className="px-4 py-3 text-xs text-foreground max-w-[140px] truncate">
+                                  {tx.content}
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-xs text-amber-400">
+                                  {tx.amount.toFixed(2)} ICP
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-xs text-emerald-400">
+                                  {tx.creatorShare.toFixed(3)} ICP
+                                </td>
+                                <td className="px-4 py-3 text-right font-mono text-xs text-violet-400">
+                                  {tx.hyveilCut.toFixed(3)} ICP
+                                </td>
+                                <td className="px-4 py-3 text-right text-xs text-muted-foreground">
+                                  {tx.date}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
           </div>
