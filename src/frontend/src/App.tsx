@@ -3414,12 +3414,9 @@ export default function App() {
                       {Number(myIcpDeposit) < Number(registrationFee) && (
                         <Button
                           className="w-full rounded-xl bg-amber-600/80 hover:bg-amber-500/80 text-white gap-2"
-                          disabled={regLoading}
+                          disabled={regLoading || !actor || actorFetching}
                           onClick={async () => {
-                            if (!actor) {
-                              toast.error("Actor not ready");
-                              return;
-                            }
+                            if (!actor) return;
                             setRegLoading(true);
                             try {
                               await actor.depositIcp(registrationFee);
@@ -3536,12 +3533,9 @@ export default function App() {
                       </Button>
                       <Button
                         className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white gap-2"
-                        disabled={regLoading}
+                        disabled={regLoading || !actor || actorFetching}
                         onClick={async () => {
-                          if (!actor) {
-                            toast.error("Actor not ready");
-                            return;
-                          }
+                          if (!actor) return;
                           setRegLoading(true);
                           try {
                             const record = await actor.registerPartner({
@@ -3571,6 +3565,11 @@ export default function App() {
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />{" "}
                             Deploying canister...
+                          </>
+                        ) : !actor || actorFetching ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />{" "}
+                            Connecting...
                           </>
                         ) : (
                           <>
