@@ -8,10 +8,37 @@
 
 import { IDL } from '@icp-sdk/core/candid';
 
+export const _CaffeineStorageCreateCertificateResult = IDL.Record({
+  'method' : IDL.Text,
+  'blob_hash' : IDL.Text,
+});
+export const _CaffeineStorageRefillInformation = IDL.Record({
+  'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
+});
+export const _CaffeineStorageRefillResult = IDL.Record({
+  'success' : IDL.Opt(IDL.Bool),
+  'topped_up_amount' : IDL.Opt(IDL.Nat),
+});
+export const ContentItem = IDL.Record({
+  'id' : IDL.Text,
+  'title' : IDL.Text,
+  'contentType' : IDL.Text,
+  'createdAt' : IDL.Int,
+  'description' : IDL.Text,
+  'partnerId' : IDL.Nat,
+  'priceE8s' : IDL.Nat,
+});
 export const UserRole = IDL.Variant({
   'admin' : IDL.Null,
   'user' : IDL.Null,
   'guest' : IDL.Null,
+});
+export const PlatformRevenue = IDL.Record({
+  'partnerCount' : IDL.Nat,
+  'totalCreatorShare' : IDL.Nat,
+  'totalHyveilShare' : IDL.Nat,
+  'totalPurchases' : IDL.Nat,
+  'totalRevenue' : IDL.Nat,
 });
 export const PartnerStatus = IDL.Variant({
   'revoked' : IDL.Null,
@@ -25,15 +52,56 @@ export const PartnerRecord = IDL.Record({
   'name' : IDL.Text,
   'description' : IDL.Text,
   'website' : IDL.Text,
+  'monetizationModel' : IDL.Text,
   'chains' : IDL.Vec(IDL.Text),
+  'totalRevenue' : IDL.Nat,
   'registeredAt' : IDL.Int,
   'canisterId' : IDL.Principal,
 });
 export const UserProfile = IDL.Record({ 'name' : IDL.Text });
+export const ChannelRevenue = IDL.Record({
+  'partnerName' : IDL.Text,
+  'creatorShare' : IDL.Nat,
+  'hyveilShare' : IDL.Nat,
+  'partnerId' : IDL.Nat,
+  'purchaseCount' : IDL.Nat,
+  'totalRevenue' : IDL.Nat,
+  'canisterId' : IDL.Principal,
+});
+export const RevenueStats = IDL.Record({
+  'creatorShare' : IDL.Nat,
+  'hyveilShare' : IDL.Nat,
+  'purchaseCount' : IDL.Nat,
+  'totalRevenue' : IDL.Nat,
+});
+export const Comment = IDL.Record({
+  'createdAt' : IDL.Int,
+  'text' : IDL.Text,
+  'author' : IDL.Principal,
+});
+export const VideoMeta = IDL.Record({
+  'id' : IDL.Text,
+  'title' : IDL.Text,
+  'likes' : IDL.Nat,
+  'caption' : IDL.Text,
+  'blobId' : IDL.Text,
+  'comments' : IDL.Vec(Comment),
+  'uploadedAt' : IDL.Nat,
+});
 export const ProxyResponse = IDL.Record({
   'body' : IDL.Text,
   'statusCode' : IDL.Nat,
   'success' : IDL.Bool,
+});
+export const PurchaseRecord = IDL.Record({
+  'id' : IDL.Nat,
+  'contentId' : IDL.Text,
+  'hyveilShareE8s' : IDL.Nat,
+  'partnerId' : IDL.Nat,
+  'totalAmountE8s' : IDL.Nat,
+  'creatorShareE8s' : IDL.Nat,
+  'timestamp' : IDL.Int,
+  'buyer' : IDL.Principal,
 });
 export const RegisterPartnerInput = IDL.Record({
   'name' : IDL.Text,
@@ -61,15 +129,52 @@ export const TransformationOutput = IDL.Record({
 });
 
 export const idlService = IDL.Service({
+  '_caffeineStorageBlobIsLive' : IDL.Func(
+      [IDL.Vec(IDL.Nat8)],
+      [IDL.Bool],
+      ['query'],
+    ),
+  '_caffeineStorageBlobsToDelete' : IDL.Func(
+      [],
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      ['query'],
+    ),
+  '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+      [IDL.Vec(IDL.Vec(IDL.Nat8))],
+      [],
+      [],
+    ),
+  '_caffeineStorageCreateCertificate' : IDL.Func(
+      [IDL.Text],
+      [_CaffeineStorageCreateCertificateResult],
+      [],
+    ),
+  '_caffeineStorageRefillCashier' : IDL.Func(
+      [IDL.Opt(_CaffeineStorageRefillInformation)],
+      [_CaffeineStorageRefillResult],
+      [],
+    ),
+  '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'addComment' : IDL.Func([IDL.Text, IDL.Text], [], []),
+  'addContentItem' : IDL.Func(
+      [IDL.Nat, IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
+      [ContentItem],
+      [],
+    ),
   'approvePartner' : IDL.Func([IDL.Nat], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'claimOwnerIfFirst' : IDL.Func([], [IDL.Bool], []),
   'depositIcp' : IDL.Func([IDL.Nat], [], []),
+  'getAllPartnersRevenue' : IDL.Func([], [PlatformRevenue], ['query']),
   'getApprovedPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getContentItems' : IDL.Func([IDL.Nat], [IDL.Vec(ContentItem)], ['query']),
+  'getMyChannelsRevenue' : IDL.Func([], [IDL.Vec(ChannelRevenue)], ['query']),
   'getMyIcpBalance' : IDL.Func([], [IDL.Nat], ['query']),
   'getMyPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
+  'getPartnerRevenue' : IDL.Func([IDL.Nat], [RevenueStats], ['query']),
   'getPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
   'getRegistrationFee' : IDL.Func([], [IDL.Nat], ['query']),
   'getUserProfile' : IDL.Func(
@@ -77,7 +182,9 @@ export const idlService = IDL.Service({
       [IDL.Opt(UserProfile)],
       ['query'],
     ),
+  'getVideos' : IDL.Func([], [IDL.Vec(VideoMeta)], ['query']),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'likeVideo' : IDL.Func([IDL.Text], [], []),
   'proxyFetch' : IDL.Func(
       [
         IDL.Text,
@@ -88,9 +195,12 @@ export const idlService = IDL.Service({
       [ProxyResponse],
       [],
     ),
+  'purchaseContent' : IDL.Func([IDL.Text], [PurchaseRecord], []),
   'registerPartner' : IDL.Func([RegisterPartnerInput], [PartnerRecord], []),
   'revokePartner' : IDL.Func([IDL.Nat], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+  'saveVideoMeta' : IDL.Func([VideoMeta], [], []),
+  'setMonetizationModel' : IDL.Func([IDL.Nat, IDL.Text], [], []),
   'transform' : IDL.Func(
       [TransformationInput],
       [TransformationOutput],
@@ -101,10 +211,37 @@ export const idlService = IDL.Service({
 export const idlInitArgs = [];
 
 export const idlFactory = ({ IDL }) => {
+  const _CaffeineStorageCreateCertificateResult = IDL.Record({
+    'method' : IDL.Text,
+    'blob_hash' : IDL.Text,
+  });
+  const _CaffeineStorageRefillInformation = IDL.Record({
+    'proposed_top_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const _CaffeineStorageRefillResult = IDL.Record({
+    'success' : IDL.Opt(IDL.Bool),
+    'topped_up_amount' : IDL.Opt(IDL.Nat),
+  });
+  const ContentItem = IDL.Record({
+    'id' : IDL.Text,
+    'title' : IDL.Text,
+    'contentType' : IDL.Text,
+    'createdAt' : IDL.Int,
+    'description' : IDL.Text,
+    'partnerId' : IDL.Nat,
+    'priceE8s' : IDL.Nat,
+  });
   const UserRole = IDL.Variant({
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
+  });
+  const PlatformRevenue = IDL.Record({
+    'partnerCount' : IDL.Nat,
+    'totalCreatorShare' : IDL.Nat,
+    'totalHyveilShare' : IDL.Nat,
+    'totalPurchases' : IDL.Nat,
+    'totalRevenue' : IDL.Nat,
   });
   const PartnerStatus = IDL.Variant({
     'revoked' : IDL.Null,
@@ -118,15 +255,56 @@ export const idlFactory = ({ IDL }) => {
     'name' : IDL.Text,
     'description' : IDL.Text,
     'website' : IDL.Text,
+    'monetizationModel' : IDL.Text,
     'chains' : IDL.Vec(IDL.Text),
+    'totalRevenue' : IDL.Nat,
     'registeredAt' : IDL.Int,
     'canisterId' : IDL.Principal,
   });
   const UserProfile = IDL.Record({ 'name' : IDL.Text });
+  const ChannelRevenue = IDL.Record({
+    'partnerName' : IDL.Text,
+    'creatorShare' : IDL.Nat,
+    'hyveilShare' : IDL.Nat,
+    'partnerId' : IDL.Nat,
+    'purchaseCount' : IDL.Nat,
+    'totalRevenue' : IDL.Nat,
+    'canisterId' : IDL.Principal,
+  });
+  const RevenueStats = IDL.Record({
+    'creatorShare' : IDL.Nat,
+    'hyveilShare' : IDL.Nat,
+    'purchaseCount' : IDL.Nat,
+    'totalRevenue' : IDL.Nat,
+  });
+  const Comment = IDL.Record({
+    'createdAt' : IDL.Int,
+    'text' : IDL.Text,
+    'author' : IDL.Principal,
+  });
+  const VideoMeta = IDL.Record({
+    'id' : IDL.Text,
+    'title' : IDL.Text,
+    'likes' : IDL.Nat,
+    'caption' : IDL.Text,
+    'blobId' : IDL.Text,
+    'comments' : IDL.Vec(Comment),
+    'uploadedAt' : IDL.Nat,
+  });
   const ProxyResponse = IDL.Record({
     'body' : IDL.Text,
     'statusCode' : IDL.Nat,
     'success' : IDL.Bool,
+  });
+  const PurchaseRecord = IDL.Record({
+    'id' : IDL.Nat,
+    'contentId' : IDL.Text,
+    'hyveilShareE8s' : IDL.Nat,
+    'partnerId' : IDL.Nat,
+    'totalAmountE8s' : IDL.Nat,
+    'creatorShareE8s' : IDL.Nat,
+    'timestamp' : IDL.Int,
+    'buyer' : IDL.Principal,
   });
   const RegisterPartnerInput = IDL.Record({
     'name' : IDL.Text,
@@ -151,15 +329,52 @@ export const idlFactory = ({ IDL }) => {
   });
   
   return IDL.Service({
+    '_caffeineStorageBlobIsLive' : IDL.Func(
+        [IDL.Vec(IDL.Nat8)],
+        [IDL.Bool],
+        ['query'],
+      ),
+    '_caffeineStorageBlobsToDelete' : IDL.Func(
+        [],
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        ['query'],
+      ),
+    '_caffeineStorageConfirmBlobDeletion' : IDL.Func(
+        [IDL.Vec(IDL.Vec(IDL.Nat8))],
+        [],
+        [],
+      ),
+    '_caffeineStorageCreateCertificate' : IDL.Func(
+        [IDL.Text],
+        [_CaffeineStorageCreateCertificateResult],
+        [],
+      ),
+    '_caffeineStorageRefillCashier' : IDL.Func(
+        [IDL.Opt(_CaffeineStorageRefillInformation)],
+        [_CaffeineStorageRefillResult],
+        [],
+      ),
+    '_caffeineStorageUpdateGatewayPrincipals' : IDL.Func([], [], []),
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'addComment' : IDL.Func([IDL.Text, IDL.Text], [], []),
+    'addContentItem' : IDL.Func(
+        [IDL.Nat, IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
+        [ContentItem],
+        [],
+      ),
     'approvePartner' : IDL.Func([IDL.Nat], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'claimOwnerIfFirst' : IDL.Func([], [IDL.Bool], []),
     'depositIcp' : IDL.Func([IDL.Nat], [], []),
+    'getAllPartnersRevenue' : IDL.Func([], [PlatformRevenue], ['query']),
     'getApprovedPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getContentItems' : IDL.Func([IDL.Nat], [IDL.Vec(ContentItem)], ['query']),
+    'getMyChannelsRevenue' : IDL.Func([], [IDL.Vec(ChannelRevenue)], ['query']),
     'getMyIcpBalance' : IDL.Func([], [IDL.Nat], ['query']),
     'getMyPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
+    'getPartnerRevenue' : IDL.Func([IDL.Nat], [RevenueStats], ['query']),
     'getPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
     'getRegistrationFee' : IDL.Func([], [IDL.Nat], ['query']),
     'getUserProfile' : IDL.Func(
@@ -167,7 +382,9 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(UserProfile)],
         ['query'],
       ),
+    'getVideos' : IDL.Func([], [IDL.Vec(VideoMeta)], ['query']),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'likeVideo' : IDL.Func([IDL.Text], [], []),
     'proxyFetch' : IDL.Func(
         [
           IDL.Text,
@@ -178,9 +395,12 @@ export const idlFactory = ({ IDL }) => {
         [ProxyResponse],
         [],
       ),
+    'purchaseContent' : IDL.Func([IDL.Text], [PurchaseRecord], []),
     'registerPartner' : IDL.Func([RegisterPartnerInput], [PartnerRecord], []),
     'revokePartner' : IDL.Func([IDL.Nat], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
+    'saveVideoMeta' : IDL.Func([VideoMeta], [], []),
+    'setMonetizationModel' : IDL.Func([IDL.Nat, IDL.Text], [], []),
     'transform' : IDL.Func(
         [TransformationInput],
         [TransformationOutput],

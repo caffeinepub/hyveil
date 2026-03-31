@@ -10,6 +10,29 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface ChannelRevenue {
+  'partnerName' : string,
+  'creatorShare' : bigint,
+  'hyveilShare' : bigint,
+  'partnerId' : bigint,
+  'purchaseCount' : bigint,
+  'totalRevenue' : bigint,
+  'canisterId' : Principal,
+}
+export interface Comment {
+  'createdAt' : bigint,
+  'text' : string,
+  'author' : Principal,
+}
+export interface ContentItem {
+  'id' : string,
+  'title' : string,
+  'contentType' : string,
+  'createdAt' : bigint,
+  'description' : string,
+  'partnerId' : bigint,
+  'priceE8s' : bigint,
+}
 export interface PartnerRecord {
   'id' : bigint,
   'status' : PartnerStatus,
@@ -17,23 +40,48 @@ export interface PartnerRecord {
   'name' : string,
   'description' : string,
   'website' : string,
+  'monetizationModel' : string,
   'chains' : Array<string>,
+  'totalRevenue' : bigint,
   'registeredAt' : bigint,
   'canisterId' : Principal,
 }
 export type PartnerStatus = { 'revoked' : null } |
   { 'pending' : null } |
   { 'approved' : null };
+export interface PlatformRevenue {
+  'partnerCount' : bigint,
+  'totalCreatorShare' : bigint,
+  'totalHyveilShare' : bigint,
+  'totalPurchases' : bigint,
+  'totalRevenue' : bigint,
+}
 export interface ProxyResponse {
   'body' : string,
   'statusCode' : bigint,
   'success' : boolean,
+}
+export interface PurchaseRecord {
+  'id' : bigint,
+  'contentId' : string,
+  'hyveilShareE8s' : bigint,
+  'partnerId' : bigint,
+  'totalAmountE8s' : bigint,
+  'creatorShareE8s' : bigint,
+  'timestamp' : bigint,
+  'buyer' : Principal,
 }
 export interface RegisterPartnerInput {
   'name' : string,
   'description' : string,
   'website' : string,
   'chains' : Array<string>,
+}
+export interface RevenueStats {
+  'creatorShare' : bigint,
+  'hyveilShare' : bigint,
+  'purchaseCount' : bigint,
+  'totalRevenue' : bigint,
 }
 export interface TransformationInput {
   'context' : Uint8Array,
@@ -48,6 +96,26 @@ export interface UserProfile { 'name' : string }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface VideoMeta {
+  'id' : string,
+  'title' : string,
+  'likes' : bigint,
+  'caption' : string,
+  'blobId' : string,
+  'comments' : Array<Comment>,
+  'uploadedAt' : bigint,
+}
+export interface _CaffeineStorageCreateCertificateResult {
+  'method' : string,
+  'blob_hash' : string,
+}
+export interface _CaffeineStorageRefillInformation {
+  'proposed_top_up_amount' : [] | [bigint],
+}
+export interface _CaffeineStorageRefillResult {
+  'success' : [] | [boolean],
+  'topped_up_amount' : [] | [bigint],
+}
 export interface http_header { 'value' : string, 'name' : string }
 export interface http_request_result {
   'status' : bigint,
@@ -55,27 +123,56 @@ export interface http_request_result {
   'headers' : Array<http_header>,
 }
 export interface _SERVICE {
+  '_caffeineStorageBlobIsLive' : ActorMethod<[Uint8Array], boolean>,
+  '_caffeineStorageBlobsToDelete' : ActorMethod<[], Array<Uint8Array>>,
+  '_caffeineStorageConfirmBlobDeletion' : ActorMethod<
+    [Array<Uint8Array>],
+    undefined
+  >,
+  '_caffeineStorageCreateCertificate' : ActorMethod<
+    [string],
+    _CaffeineStorageCreateCertificateResult
+  >,
+  '_caffeineStorageRefillCashier' : ActorMethod<
+    [[] | [_CaffeineStorageRefillInformation]],
+    _CaffeineStorageRefillResult
+  >,
+  '_caffeineStorageUpdateGatewayPrincipals' : ActorMethod<[], undefined>,
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'addComment' : ActorMethod<[string, string], undefined>,
+  'addContentItem' : ActorMethod<
+    [bigint, string, string, bigint, string],
+    ContentItem
+  >,
   'approvePartner' : ActorMethod<[bigint], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'claimOwnerIfFirst' : ActorMethod<[], boolean>,
   'depositIcp' : ActorMethod<[bigint], undefined>,
+  'getAllPartnersRevenue' : ActorMethod<[], PlatformRevenue>,
   'getApprovedPartners' : ActorMethod<[], Array<PartnerRecord>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getContentItems' : ActorMethod<[bigint], Array<ContentItem>>,
+  'getMyChannelsRevenue' : ActorMethod<[], Array<ChannelRevenue>>,
   'getMyIcpBalance' : ActorMethod<[], bigint>,
   'getMyPartners' : ActorMethod<[], Array<PartnerRecord>>,
+  'getPartnerRevenue' : ActorMethod<[bigint], RevenueStats>,
   'getPartners' : ActorMethod<[], Array<PartnerRecord>>,
   'getRegistrationFee' : ActorMethod<[], bigint>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
+  'getVideos' : ActorMethod<[], Array<VideoMeta>>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
-  'claimOwnerIfFirst' : ActorMethod<[], boolean>,
+  'likeVideo' : ActorMethod<[string], undefined>,
   'proxyFetch' : ActorMethod<
     [string, string, [] | [string], [] | [Array<[string, string]>]],
     ProxyResponse
   >,
+  'purchaseContent' : ActorMethod<[string], PurchaseRecord>,
   'registerPartner' : ActorMethod<[RegisterPartnerInput], PartnerRecord>,
   'revokePartner' : ActorMethod<[bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
+  'saveVideoMeta' : ActorMethod<[VideoMeta], undefined>,
+  'setMonetizationModel' : ActorMethod<[bigint, string], undefined>,
   'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
 }
 export declare const idlService: IDL.ServiceClass;

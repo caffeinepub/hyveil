@@ -7,15 +7,82 @@ export interface None {
     __kind__: "None";
 }
 export type Option<T> = Some<T> | None;
+export interface TransformationOutput {
+    status: bigint;
+    body: Uint8Array;
+    headers: Array<http_header>;
+}
+export interface Comment {
+    createdAt: bigint;
+    text: string;
+    author: Principal;
+}
+export interface ChannelRevenue {
+    partnerName: string;
+    creatorShare: bigint;
+    hyveilShare: bigint;
+    partnerId: bigint;
+    purchaseCount: bigint;
+    totalRevenue: bigint;
+    canisterId: Principal;
+}
+export interface PlatformRevenue {
+    partnerCount: bigint;
+    totalCreatorShare: bigint;
+    totalHyveilShare: bigint;
+    totalPurchases: bigint;
+    totalRevenue: bigint;
+}
+export interface VideoMeta {
+    id: string;
+    title: string;
+    likes: bigint;
+    caption: string;
+    blobId: string;
+    comments: Array<Comment>;
+    uploadedAt: bigint;
+}
+export interface ProxyResponse {
+    body: string;
+    statusCode: bigint;
+    success: boolean;
+}
+export interface RevenueStats {
+    creatorShare: bigint;
+    hyveilShare: bigint;
+    purchaseCount: bigint;
+    totalRevenue: bigint;
+}
+export interface http_header {
+    value: string;
+    name: string;
+}
 export interface http_request_result {
     status: bigint;
     body: Uint8Array;
     headers: Array<http_header>;
 }
-export interface TransformationOutput {
-    status: bigint;
-    body: Uint8Array;
-    headers: Array<http_header>;
+export interface PartnerRecord {
+    id: bigint;
+    status: PartnerStatus;
+    owner: Principal;
+    name: string;
+    description: string;
+    website: string;
+    monetizationModel: string;
+    chains: Array<string>;
+    totalRevenue: bigint;
+    registeredAt: bigint;
+    canisterId: Principal;
+}
+export interface ContentItem {
+    id: string;
+    title: string;
+    contentType: string;
+    createdAt: bigint;
+    description: string;
+    partnerId: bigint;
+    priceE8s: bigint;
 }
 export interface TransformationInput {
     context: Uint8Array;
@@ -27,27 +94,17 @@ export interface RegisterPartnerInput {
     website: string;
     chains: Array<string>;
 }
-export interface ProxyResponse {
-    body: string;
-    statusCode: bigint;
-    success: boolean;
-}
-export interface PartnerRecord {
+export interface PurchaseRecord {
     id: bigint;
-    status: PartnerStatus;
-    owner: Principal;
-    name: string;
-    description: string;
-    website: string;
-    chains: Array<string>;
-    registeredAt: bigint;
-    canisterId: Principal;
+    contentId: string;
+    hyveilShareE8s: bigint;
+    partnerId: bigint;
+    totalAmountE8s: bigint;
+    creatorShareE8s: bigint;
+    timestamp: bigint;
+    buyer: Principal;
 }
 export interface UserProfile {
-    name: string;
-}
-export interface http_header {
-    value: string;
     name: string;
 }
 export enum PartnerStatus {
@@ -61,21 +118,33 @@ export enum UserRole {
     guest = "guest"
 }
 export interface backendInterface {
+    addComment(id: string, text: string): Promise<void>;
+    addContentItem(partnerId: bigint, title: string, description: string, priceE8s: bigint, contentType: string): Promise<ContentItem>;
     approvePartner(id: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    claimOwnerIfFirst(): Promise<boolean>;
     depositIcp(amount: bigint): Promise<void>;
+    getAllPartnersRevenue(): Promise<PlatformRevenue>;
     getApprovedPartners(): Promise<Array<PartnerRecord>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
+    getContentItems(partnerId: bigint): Promise<Array<ContentItem>>;
+    getMyChannelsRevenue(): Promise<Array<ChannelRevenue>>;
     getMyIcpBalance(): Promise<bigint>;
     getMyPartners(): Promise<Array<PartnerRecord>>;
+    getPartnerRevenue(partnerId: bigint): Promise<RevenueStats>;
     getPartners(): Promise<Array<PartnerRecord>>;
     getRegistrationFee(): Promise<bigint>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
+    getVideos(): Promise<Array<VideoMeta>>;
     isCallerAdmin(): Promise<boolean>;
+    likeVideo(id: string): Promise<void>;
     proxyFetch(url: string, method: string, body: string | null, extraHeaders: Array<[string, string]> | null): Promise<ProxyResponse>;
+    purchaseContent(contentId: string): Promise<PurchaseRecord>;
     registerPartner(input: RegisterPartnerInput): Promise<PartnerRecord>;
     revokePartner(id: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
+    saveVideoMeta(meta: VideoMeta): Promise<void>;
+    setMonetizationModel(partnerId: bigint, model: string): Promise<void>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
 }

@@ -29,6 +29,7 @@ import {
   Building2,
   CheckCircle2,
   ChevronRight,
+  Clapperboard,
   Coins,
   Copy,
   Edit3,
@@ -57,11 +58,18 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { PartnerRecord, PartnerStatus } from "./backend.d";
+import type {
+  ChannelRevenue,
+  ContentItem,
+  PartnerRecord,
+  PartnerStatus,
+  PlatformRevenue,
+} from "./backend.d";
 import { useActor } from "./hooks/useActor";
 import { useCkTokenBalances } from "./hooks/useCkTokenBalances";
 import { useIcpBalance } from "./hooks/useIcpBalance";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
+import { AdminCreatorTemplate } from "./pages/AdminCreatorTemplate";
 
 type Tab =
   | "dashboard"
@@ -71,7 +79,9 @@ type Tab =
   | "wallet"
   | "revenue"
   | "partners"
-  | "agents";
+  | "agents"
+  | "template"
+  | "creator";
 
 interface Transaction {
   id: string;
@@ -545,6 +555,27 @@ export default function App() {
   >("all");
   const [agentChainFilter, setAgentChainFilter] = useState("All");
 
+  const [myChannels, setMyChannels] = useState<ChannelRevenue[]>([]);
+  const [platformRevenue, setPlatformRevenue] =
+    useState<PlatformRevenue | null>(null);
+  const [channelContents, setChannelContents] = useState<
+    Record<string, ContentItem[]>
+  >({});
+  const [addContentModal, setAddContentModal] = useState<{
+    partnerId: bigint;
+    partnerName: string;
+  } | null>(null);
+  const [addContentForm, setAddContentForm] = useState({
+    title: "",
+    description: "",
+    price: "",
+    contentType: "pay-per-view",
+  });
+  const [addContentLoading, setAddContentLoading] = useState(false);
+  const [expandedChannels, setExpandedChannels] = useState<Set<string>>(
+    new Set(),
+  );
+
   const [dubLanguage, setDubLanguage] = useState("en");
   const [subtitles, setSubtitles] = useState(true);
   const [regionAnon, setRegionAnon] = useState(true);
@@ -605,6 +636,65 @@ export default function App() {
     const bal = await actor.getMyIcpBalance().catch(() => 0n);
     setMyIcpDeposit(bal);
   };
+
+  // Fetch creator channels revenue
+  useEffect(() => {
+    if (!isLoggedIn || !actor) return;
+    actor
+      .getMyChannelsRevenue()
+      .then(setMyChannels)
+      .catch(() => {});
+    if (isAdmin) {
+      actor
+        .getAllPartnersRevenue()
+        .then(setPlatformRevenue)
+        .catch(() => {});
+    }
+  }, [isLoggedIn, actor, isAdmin]);
+
+  const fetchChannelContent = async (partnerId: bigint) => {
+    if (!actor) return;
+    const items = await actor
+      .getContentItems(partnerId)
+      .catch(() => [] as ContentItem[]);
+    setChannelContents((prev) => ({ ...prev, [partnerId.toString()]: items }));
+  };
+
+  const handleAddContent = async () => {
+    if (!actor || !addContentModal) return;
+    if (!addContentForm.title.trim() || !addContentForm.price) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    setAddContentLoading(true);
+    try {
+      const priceE8s = BigInt(
+        Math.round(Number.parseFloat(addContentForm.price) * 1e8),
+      );
+      await actor.addContentItem(
+        addContentModal.partnerId,
+        addContentForm.title.trim(),
+        addContentForm.description.trim(),
+        priceE8s,
+        addContentForm.contentType,
+      );
+      toast.success("Content added successfully!");
+      await fetchChannelContent(addContentModal.partnerId);
+      setAddContentModal(null);
+      setAddContentForm({
+        title: "",
+        description: "",
+        price: "",
+        contentType: "pay-per-view",
+      });
+    } catch {
+      toast.error("Failed to add content");
+    } finally {
+      setAddContentLoading(false);
+    }
+  };
+
+  const e8sToIcp = (e8s: bigint) => (Number(e8s) / 1e8).toFixed(4);
 
   const filteredWeb2Apps = useMemo(() => {
     return WEB2_APPS.filter(
@@ -896,6 +986,15 @@ export default function App() {
       label: "Revenue",
       icon: <BarChart3 className="w-3.5 h-3.5" />,
     },
+    ...(isLoggedIn && myChannels.length > 0
+      ? [
+          {
+            id: "creator" as Tab,
+            label: "Creator",
+            icon: <TrendingUp className="w-3.5 h-3.5" />,
+          },
+        ]
+      : []),
     {
       id: "partners",
       label: "Partners",
@@ -906,6 +1005,15 @@ export default function App() {
       label: "AI Agents",
       icon: <Bot className="w-3.5 h-3.5" />,
     },
+    ...(isAdmin
+      ? [
+          {
+            id: "template" as Tab,
+            label: "Template",
+            icon: <Clapperboard className="w-3.5 h-3.5" />,
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -1195,6 +1303,60 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+
+                {/* Admin Platform Revenue Widget */}
+                {isAdmin && platformRevenue && (
+                  <div>
+                    <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
+                      <BarChart3 className="w-4 h-4 text-violet-400" />
+                      Platform Revenue
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="glass-card rounded-2xl p-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Commission Earned
+                        </p>
+                        <p
+                          className="text-lg font-bold"
+                          style={{ color: "#8b5cf6" }}
+                        >
+                          {(
+                            Number(platformRevenue.totalHyveilShare) / 1e8
+                          ).toFixed(4)}{" "}
+                          ICP
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          HYVEIL 10% share
+                        </p>
+                      </div>
+                      <div className="glass-card rounded-2xl p-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Active Partner Channels
+                        </p>
+                        <p className="text-lg font-bold text-foreground">
+                          {platformRevenue.partnerCount.toString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Deployed on ICP
+                        </p>
+                      </div>
+                      <div className="glass-card rounded-2xl p-4">
+                        <p className="text-xs text-muted-foreground mb-1">
+                          Total Purchases
+                        </p>
+                        <p
+                          className="text-lg font-bold"
+                          style={{ color: "#10b981" }}
+                        >
+                          {platformRevenue.totalPurchases.toString()}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Platform-wide
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Recent activity */}
                 <div>
@@ -2290,6 +2452,431 @@ export default function App() {
                 </table>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* CREATOR DASHBOARD TAB */}
+        {activeTab === "creator" && (
+          <div className="fade-up space-y-6">
+            {myChannels.length === 0 ? (
+              <div
+                className="flex flex-col items-center justify-center min-h-[50vh] gap-6"
+                data-ocid="creator.empty_state"
+              >
+                <div
+                  className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                  style={{ background: "rgba(139,92,246,0.15)" }}
+                >
+                  <TrendingUp
+                    className="w-7 h-7"
+                    style={{ color: "#8b5cf6" }}
+                  />
+                </div>
+                <div className="text-center">
+                  <h2 className="text-xl font-display font-bold mb-2">
+                    No Creator Channels Yet
+                  </h2>
+                  <p className="text-muted-foreground text-sm max-w-sm">
+                    Deploy your first creator channel to start monetizing your
+                    content with automatic 90/10 revenue splits.
+                  </p>
+                </div>
+                <Button
+                  onClick={() => setActiveTab("partners")}
+                  className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl"
+                  data-ocid="creator.partners.button"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Deploy a Channel
+                </Button>
+              </div>
+            ) : (
+              <>
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-display font-bold mb-1">
+                      My Creator Channels
+                    </h2>
+                    <p className="text-muted-foreground text-sm">
+                      Total earnings:{" "}
+                      <span className="text-amber-400 font-semibold">
+                        {e8sToIcp(
+                          myChannels.reduce((s, c) => s + c.creatorShare, 0n),
+                        )}{" "}
+                        ICP
+                      </span>
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="glass border-white/10 text-sm"
+                    onClick={() => {
+                      if (actor)
+                        actor
+                          .getMyChannelsRevenue()
+                          .then(setMyChannels)
+                          .catch(() => {});
+                    }}
+                    data-ocid="creator.secondary_button"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
+                  </Button>
+                </div>
+
+                {/* Summary cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div
+                    className="glass-card rounded-2xl p-5"
+                    data-ocid="creator.card"
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center"
+                        style={{ background: "rgba(251,191,36,0.15)" }}
+                      >
+                        <Coins
+                          className="w-4 h-4"
+                          style={{ color: "#fbbf24" }}
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        Total Earned
+                      </span>
+                    </div>
+                    <p
+                      className="text-2xl font-display font-bold"
+                      style={{ color: "#fbbf24" }}
+                    >
+                      {e8sToIcp(
+                        myChannels.reduce((s, c) => s + c.creatorShare, 0n),
+                      )}{" "}
+                      ICP
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Your 90% creator share
+                    </p>
+                  </div>
+                  <div
+                    className="glass-card rounded-2xl p-5"
+                    data-ocid="creator.card"
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center"
+                        style={{ background: "rgba(139,92,246,0.15)" }}
+                      >
+                        <Percent
+                          className="w-4 h-4"
+                          style={{ color: "#8b5cf6" }}
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        Platform Commission
+                      </span>
+                    </div>
+                    <p
+                      className="text-2xl font-display font-bold"
+                      style={{ color: "#8b5cf6" }}
+                    >
+                      {e8sToIcp(
+                        myChannels.reduce((s, c) => s + c.hyveilShare, 0n),
+                      )}{" "}
+                      ICP
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      HYVEIL 10% share
+                    </p>
+                  </div>
+                  <div
+                    className="glass-card rounded-2xl p-5"
+                    data-ocid="creator.card"
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center"
+                        style={{ background: "rgba(16,185,129,0.15)" }}
+                      >
+                        <Activity
+                          className="w-4 h-4"
+                          style={{ color: "#10b981" }}
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground">
+                        Total Purchases
+                      </span>
+                    </div>
+                    <p
+                      className="text-2xl font-display font-bold"
+                      style={{ color: "#10b981" }}
+                    >
+                      {myChannels
+                        .reduce((s, c) => s + Number(c.purchaseCount), 0)
+                        .toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Across all channels
+                    </p>
+                  </div>
+                </div>
+
+                {/* Per-channel cards */}
+                <div className="space-y-4">
+                  {myChannels.map((ch, idx) => {
+                    const cidStr = ch.canisterId.toString();
+                    const shortCid = `${cidStr.slice(0, 8)}...${cidStr.slice(-4)}`;
+                    const isExpanded = expandedChannels.has(cidStr);
+                    const contents =
+                      channelContents[ch.partnerId.toString()] ?? [];
+                    return (
+                      <div
+                        key={cidStr}
+                        className="glass-card rounded-2xl p-5 space-y-4"
+                        data-ocid={`creator.channel.item.${idx + 1}`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div
+                              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                              style={{
+                                background:
+                                  "linear-gradient(135deg, #ec4899, #8b5cf6)",
+                              }}
+                            >
+                              <Film className="w-5 h-5 text-white" />
+                            </div>
+                            <div>
+                              <h3 className="font-semibold text-foreground">
+                                {ch.partnerName}
+                              </h3>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-xs text-muted-foreground font-mono">
+                                  {shortCid}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(cidStr);
+                                    toast.success("Canister ID copied!");
+                                  }}
+                                  className="text-white/30 hover:text-white/60"
+                                  data-ocid={`creator.channel.secondary_button.${idx + 1}`}
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="text-xs px-2 py-0.5 rounded-full font-medium"
+                              style={{
+                                background: "rgba(16,185,129,0.15)",
+                                color: "#10b981",
+                                border: "1px solid rgba(16,185,129,0.3)",
+                              }}
+                            >
+                              Active
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Monetization toggle */}
+                        <div
+                          className="flex items-center justify-between p-3 rounded-xl"
+                          style={{
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(255,255,255,0.06)",
+                          }}
+                        >
+                          <div>
+                            <p className="text-sm font-medium">
+                              Monetization Model
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              How viewers pay for your content
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              PPV
+                            </span>
+                            <Switch
+                              checked={false}
+                              onCheckedChange={(checked) => {
+                                if (actor) {
+                                  actor
+                                    .setMonetizationModel(
+                                      ch.partnerId,
+                                      checked ? "subscription" : "pay-per-view",
+                                    )
+                                    .then(() =>
+                                      toast.success(
+                                        "Monetization model updated",
+                                      ),
+                                    )
+                                    .catch(() =>
+                                      toast.error("Failed to update model"),
+                                    );
+                                }
+                              }}
+                              data-ocid={`creator.channel.switch.${idx + 1}`}
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              Sub
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Revenue breakdown */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div
+                            className="text-center p-3 rounded-xl"
+                            style={{ background: "rgba(255,255,255,0.03)" }}
+                          >
+                            <p className="text-xs text-muted-foreground mb-1">
+                              Total Revenue
+                            </p>
+                            <p className="text-sm font-bold text-foreground">
+                              {e8sToIcp(ch.totalRevenue)} ICP
+                            </p>
+                          </div>
+                          <div
+                            className="text-center p-3 rounded-xl"
+                            style={{ background: "rgba(16,185,129,0.06)" }}
+                          >
+                            <p className="text-xs text-muted-foreground mb-1">
+                              Your 90%
+                            </p>
+                            <p
+                              className="text-sm font-bold"
+                              style={{ color: "#10b981" }}
+                            >
+                              {e8sToIcp(ch.creatorShare)} ICP
+                            </p>
+                          </div>
+                          <div
+                            className="text-center p-3 rounded-xl"
+                            style={{ background: "rgba(139,92,246,0.06)" }}
+                          >
+                            <p className="text-xs text-muted-foreground mb-1">
+                              Platform 10%
+                            </p>
+                            <p
+                              className="text-sm font-bold"
+                              style={{ color: "#8b5cf6" }}
+                            >
+                              {e8sToIcp(ch.hyveilShare)} ICP
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Content count and actions */}
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="glass border-white/10 text-xs h-8"
+                            onClick={() =>
+                              window.open(`https://${cidStr}.icp0.io`, "_blank")
+                            }
+                            data-ocid={`creator.channel.button.${idx + 1}`}
+                          >
+                            <ExternalLink className="w-3 h-3 mr-1.5" /> Manage
+                            Channel
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="text-xs h-8"
+                            style={{
+                              background:
+                                "linear-gradient(135deg, #ec4899, #8b5cf6)",
+                              color: "white",
+                              border: "none",
+                            }}
+                            onClick={() =>
+                              setAddContentModal({
+                                partnerId: ch.partnerId,
+                                partnerName: ch.partnerName,
+                              })
+                            }
+                            data-ocid={`creator.channel.edit_button.${idx + 1}`}
+                          >
+                            <Plus className="w-3 h-3 mr-1.5" /> Add Content
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs h-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              const newSet = new Set(expandedChannels);
+                              if (isExpanded) {
+                                newSet.delete(cidStr);
+                              } else {
+                                newSet.add(cidStr);
+                                fetchChannelContent(ch.partnerId);
+                              }
+                              setExpandedChannels(newSet);
+                            }}
+                            data-ocid={`creator.channel.toggle.${idx + 1}`}
+                          >
+                            <Eye className="w-3 h-3 mr-1.5" />
+                            {isExpanded ? "Hide" : "View"} Content (
+                            {contents.length})
+                          </Button>
+                        </div>
+
+                        {/* Inline content list */}
+                        {isExpanded && (
+                          <div className="space-y-2 pt-1">
+                            {contents.length === 0 ? (
+                              <p
+                                className="text-xs text-muted-foreground text-center py-4"
+                                data-ocid={`creator.channel.empty_state.${idx + 1}`}
+                              >
+                                No content added yet. Click "Add Content" to get
+                                started.
+                              </p>
+                            ) : (
+                              contents.map((item, ci) => (
+                                <div
+                                  key={item.id}
+                                  className="flex items-center justify-between p-3 rounded-xl"
+                                  style={{
+                                    background: "rgba(255,255,255,0.03)",
+                                    border: "1px solid rgba(255,255,255,0.05)",
+                                  }}
+                                  data-ocid={`creator.content.item.${ci + 1}`}
+                                >
+                                  <div>
+                                    <p className="text-sm font-medium">
+                                      {item.title}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {item.contentType} ·{" "}
+                                      {e8sToIcp(item.priceE8s)} ICP
+                                    </p>
+                                  </div>
+                                  <span
+                                    className="text-xs px-2 py-0.5 rounded-full"
+                                    style={{
+                                      background: "rgba(139,92,246,0.15)",
+                                      color: "#a78bfa",
+                                    }}
+                                  >
+                                    {item.contentType}
+                                  </span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -3946,6 +4533,169 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ADD CONTENT MODAL */}
+      <Dialog
+        open={!!addContentModal}
+        onOpenChange={(open) => {
+          if (!open) setAddContentModal(null);
+        }}
+      >
+        <DialogContent
+          className="sm:max-w-md"
+          style={{
+            background: "#141420",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+          data-ocid="creator.add_content.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              Add Content to {addContentModal?.partnerName}
+            </DialogTitle>
+            <DialogDescription className="text-white/50">
+              Add pay-per-view or subscription content to your channel.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label className="text-white/60 text-xs">Title *</Label>
+              <Input
+                value={addContentForm.title}
+                onChange={(e) =>
+                  setAddContentForm((f) => ({ ...f, title: e.target.value }))
+                }
+                placeholder="Content title"
+                className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                data-ocid="creator.add_content.input"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-white/60 text-xs">Description</Label>
+              <Textarea
+                value={addContentForm.description}
+                onChange={(e) =>
+                  setAddContentForm((f) => ({
+                    ...f,
+                    description: e.target.value,
+                  }))
+                }
+                placeholder="Describe your content…"
+                className="bg-white/5 border-white/10 text-white placeholder:text-white/30 text-sm resize-none"
+                rows={3}
+                data-ocid="creator.add_content.textarea"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-white/60 text-xs">Price (ICP) *</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  value={addContentForm.price}
+                  onChange={(e) =>
+                    setAddContentForm((f) => ({ ...f, price: e.target.value }))
+                  }
+                  placeholder="0.1"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/30"
+                  data-ocid="creator.add_content.price_input"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-white/60 text-xs">Content Type</Label>
+                <Select
+                  value={addContentForm.contentType}
+                  onValueChange={(v) =>
+                    setAddContentForm((f) => ({ ...f, contentType: v }))
+                  }
+                >
+                  <SelectTrigger
+                    className="bg-white/5 border-white/10 text-white"
+                    data-ocid="creator.add_content.select"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent
+                    style={{
+                      background: "#1a1a2a",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                    }}
+                  >
+                    <SelectItem value="pay-per-view">Pay-per-view</SelectItem>
+                    <SelectItem value="subscription">Subscription</SelectItem>
+                    <SelectItem value="free">Free</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {addContentForm.price && (
+              <div
+                className="p-3 rounded-xl text-xs space-y-1"
+                style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                }}
+              >
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">
+                    You receive (90%)
+                  </span>
+                  <span style={{ color: "#10b981" }}>
+                    {(
+                      Number.parseFloat(addContentForm.price || "0") * 0.9
+                    ).toFixed(4)}{" "}
+                    ICP
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">HYVEIL (10%)</span>
+                  <span style={{ color: "#8b5cf6" }}>
+                    {(
+                      Number.parseFloat(addContentForm.price || "0") * 0.1
+                    ).toFixed(4)}{" "}
+                    ICP
+                  </span>
+                </div>
+              </div>
+            )}
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="ghost"
+                className="flex-1 text-white/60 hover:text-white"
+                onClick={() => setAddContentModal(null)}
+                data-ocid="creator.add_content.cancel_button"
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 font-semibold"
+                style={{
+                  background: "linear-gradient(135deg, #ec4899, #8b5cf6)",
+                  color: "white",
+                  border: "none",
+                }}
+                disabled={
+                  !addContentForm.title.trim() ||
+                  !addContentForm.price ||
+                  addContentLoading
+                }
+                onClick={handleAddContent}
+                data-ocid="creator.add_content.submit_button"
+              >
+                {addContentLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Plus className="w-4 h-4 mr-2" />
+                )}
+                {addContentLoading ? "Adding…" : "Add Content"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {activeTab === "template" && <AdminCreatorTemplate isAdmin={isAdmin} />}
 
       <Toaster />
     </div>
