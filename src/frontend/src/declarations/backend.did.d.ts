@@ -68,6 +68,7 @@ export interface _SERVICE {
   'getRegistrationFee' : ActorMethod<[], bigint>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'claimOwnerIfFirst' : ActorMethod<[], boolean>,
   'proxyFetch' : ActorMethod<
     [string, string, [] | [string], [] | [Array<[string, string]>]],
     ProxyResponse

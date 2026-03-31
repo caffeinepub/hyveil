@@ -197,6 +197,15 @@ actor {
     partners.add(id, updatedPartner);
   };
 
+  // First-login owner claim: the very first authenticated user becomes admin
+  public shared ({ caller }) func claimOwnerIfFirst() : async Bool {
+    if (caller.isAnonymous()) { return false };
+    if (accessControlState.adminAssigned) { return false };
+    accessControlState.adminAssigned := true;
+    accessControlState.userRoles.add(caller, #admin);
+    true;
+  };
+
   // Proxy fetch functionality
   type ProxyResponse = {
     statusCode : Nat;

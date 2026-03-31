@@ -45,6 +45,7 @@ import {
   Play,
   Plus,
   Radio,
+  RefreshCw,
   Search,
   Shield,
   TrendingUp,
@@ -366,51 +367,7 @@ const INITIAL_PROXY_SERVICES: ProxyService[] = [
   },
 ];
 
-const INITIAL_TRANSACTIONS: Transaction[] = [
-  {
-    id: "t1",
-    type: "credit",
-    description: "Wallet top-up",
-    amount: 2.5,
-    timestamp: "2026-03-28 14:32",
-    dapp: "HYVEIL",
-  },
-  {
-    id: "t2",
-    type: "debit",
-    description: "ICP Swap — token swap",
-    amount: 0.25,
-    timestamp: "2026-03-28 15:10",
-    dapp: "ICP Swap",
-    commission: 0.05,
-  },
-  {
-    id: "t3",
-    type: "debit",
-    description: "OpenChat — premium tier",
-    amount: 0.1,
-    timestamp: "2026-03-29 09:15",
-    dapp: "OpenChat",
-    commission: 0.02,
-  },
-  {
-    id: "t4",
-    type: "credit",
-    description: "NNS staking reward",
-    amount: 0.08,
-    timestamp: "2026-03-29 12:00",
-    dapp: "NNS DAO",
-  },
-  {
-    id: "t5",
-    type: "debit",
-    description: "Yuku NFT purchase",
-    amount: 0.5,
-    timestamp: "2026-03-30 08:44",
-    dapp: "Yuku NFT",
-    commission: 0.1,
-  },
-];
+const INITIAL_TRANSACTIONS: Transaction[] = [];
 
 const SAMPLE_AGENTS: AIAgent[] = [
   {
@@ -499,64 +456,14 @@ const SAMPLE_AGENTS: AIAgent[] = [
   },
 ];
 
-const REVENUE_TABLE = [
-  {
-    tx: "TXN-001",
-    dapp: "ICP Swap",
-    total: 0.25,
-    commission: 0.05,
-    creator: 0.2,
-    time: "2026-03-28 15:10",
-  },
-  {
-    tx: "TXN-002",
-    dapp: "OpenChat",
-    total: 0.1,
-    commission: 0.02,
-    creator: 0.08,
-    time: "2026-03-29 09:15",
-  },
-  {
-    tx: "TXN-003",
-    dapp: "Yuku NFT",
-    total: 0.5,
-    commission: 0.1,
-    creator: 0.4,
-    time: "2026-03-30 08:44",
-  },
-  {
-    tx: "TXN-004",
-    dapp: "IC-Netflix",
-    total: 0.1,
-    commission: 0.02,
-    creator: 0.08,
-    time: "2026-03-30 11:20",
-  },
-  {
-    tx: "TXN-005",
-    dapp: "HYVEIL Stream",
-    total: 0.05,
-    commission: 0.01,
-    creator: 0.04,
-    time: "2026-03-30 13:05",
-  },
-  {
-    tx: "TXN-006",
-    dapp: "Sonic DEX",
-    total: 0.3,
-    commission: 0.06,
-    creator: 0.24,
-    time: "2026-03-30 15:50",
-  },
-  {
-    tx: "TXN-007",
-    dapp: "IC-Fans",
-    total: 0.08,
-    commission: 0.016,
-    creator: 0.064,
-    time: "2026-03-30 17:30",
-  },
-];
+const REVENUE_TABLE: {
+  tx: string;
+  dapp: string;
+  total: number;
+  commission: number;
+  creator: number;
+  time: string;
+}[] = [];
 
 const CATEGORIES = [
   "All",
@@ -573,7 +480,8 @@ export default function App() {
   const { identity, login, clear } = useInternetIdentity();
   const isLoggedIn = !!identity && !identity.getPrincipal().isAnonymous();
   const { actor, isFetching: actorFetching } = useActor();
-  const refetchActor = () => {};
+  const actorError = false;
+  const retryActor = () => {};
   const { balance: realBalance } = useIcpBalance(
     isLoggedIn ? identity : undefined,
   );
@@ -630,6 +538,7 @@ export default function App() {
     description: "",
     chains: ["ICP"] as string[],
   });
+
   const [agents, setAgents] = useState<AIAgent[]>(SAMPLE_AGENTS);
   const [agentFilter, setAgentFilter] = useState<
     "all" | "pending_review" | "approved" | "rejected"
@@ -672,6 +581,8 @@ export default function App() {
   // Fetch on-chain data when logged in
   useEffect(() => {
     if (!actor || !isLoggedIn) return;
+    // Attempt to claim owner/admin role if no admin has been assigned yet
+    actor.claimOwnerIfFirst().catch(() => {});
     Promise.all([
       actor.getRegistrationFee(),
       actor.getMyIcpBalance(),
@@ -779,11 +690,14 @@ export default function App() {
 
   async function handleWeb2ProxyLaunch(app: Web2App) {
     if (!actor) {
-      if (actorFetching) {
+      if (actorError) {
+        toast.error("Backend connection failed. Click retry to reconnect.");
+        retryActor();
+      } else if (actorFetching) {
         toast.info("Connecting to proxy, please wait…");
       } else {
         toast.info("Reconnecting to proxy…");
-        refetchActor();
+        retryActor();
       }
       return;
     }
@@ -856,11 +770,14 @@ export default function App() {
         return;
       }
       if (!actor) {
-        if (actorFetching) {
+        if (actorError) {
+          toast.error("Backend connection failed. Click retry to reconnect.");
+          retryActor();
+        } else if (actorFetching) {
           toast.info("Connecting to proxy, please wait…");
         } else {
           toast.info("Reconnecting to proxy…");
-          refetchActor();
+          retryActor();
         }
         return;
       }
@@ -998,12 +915,11 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
           {/* Brand */}
           <div className="flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-lg glass flex items-center justify-center pulse-glow">
-              <Shield className="w-4 h-4 text-violet-400" />
-            </div>
-            <span className="font-display font-bold text-lg tracking-tighter gradient-text">
-              HYVEIL
-            </span>
+            <img
+              src="/assets/hyveil-logo.jpg"
+              alt="HYVEIL"
+              className="h-8 w-auto"
+            />
             <span className="hyveil-badge hidden sm:inline">BETA</span>
           </div>
 
@@ -1112,8 +1028,12 @@ export default function App() {
                     }}
                   />
                   <div className="relative">
-                    <div className="w-24 h-24 mx-auto mb-6 rounded-3xl glass-strong flex items-center justify-center pulse-glow">
-                      <Shield className="w-12 h-12 text-violet-400" />
+                    <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                      <img
+                        src="/assets/hyveil-logo.jpg"
+                        alt="HYVEIL"
+                        className="w-24 h-24 object-contain"
+                      />
                     </div>
                     <h1 className="font-display font-bold text-6xl md:text-8xl tracking-tight gradient-text mb-4">
                       HYVEIL
@@ -1176,6 +1096,11 @@ export default function App() {
                     <p className="text-muted-foreground text-sm mt-0.5">
                       Your portal is active and private
                     </p>
+                    {isAdmin && (
+                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-600/20 text-violet-300 border border-violet-500/30">
+                        <Shield className="w-3 h-3" /> Owner
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 status-online rounded-full px-3 py-1.5 text-xs font-medium">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -1277,46 +1202,52 @@ export default function App() {
                     Recent Activity
                   </h3>
                   <div className="glass-card rounded-2xl divide-y divide-white/5">
-                    {transactions.slice(0, 4).map((tx) => (
-                      <div
-                        key={tx.id}
-                        className="flex items-center justify-between p-4"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    {transactions.length === 0 ? (
+                      <div className="p-6 text-center text-muted-foreground text-sm">
+                        No transactions yet
+                      </div>
+                    ) : (
+                      transactions.slice(0, 4).map((tx) => (
+                        <div
+                          key={tx.id}
+                          className="flex items-center justify-between p-4"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                tx.type === "credit"
+                                  ? "bg-emerald-500/15 text-emerald-400"
+                                  : "bg-violet-500/15 text-violet-400"
+                              }`}
+                            >
+                              {tx.type === "credit" ? (
+                                <ArrowDownLeft className="w-4 h-4" />
+                              ) : (
+                                <ArrowUpRight className="w-4 h-4" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">
+                                {tx.description}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {tx.timestamp}
+                              </p>
+                            </div>
+                          </div>
+                          <span
+                            className={`text-sm font-mono font-medium ${
                               tx.type === "credit"
-                                ? "bg-emerald-500/15 text-emerald-400"
-                                : "bg-violet-500/15 text-violet-400"
+                                ? "text-emerald-400"
+                                : "text-violet-400"
                             }`}
                           >
-                            {tx.type === "credit" ? (
-                              <ArrowDownLeft className="w-4 h-4" />
-                            ) : (
-                              <ArrowUpRight className="w-4 h-4" />
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">
-                              {tx.description}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {tx.timestamp}
-                            </p>
-                          </div>
+                            {tx.type === "credit" ? "+" : "-"}
+                            {tx.amount.toFixed(3)} ICP
+                          </span>
                         </div>
-                        <span
-                          className={`text-sm font-mono font-medium ${
-                            tx.type === "credit"
-                              ? "text-emerald-400"
-                              : "text-violet-400"
-                          }`}
-                        >
-                          {tx.type === "credit" ? "+" : "-"}
-                          {tx.amount.toFixed(3)} ICP
-                        </span>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
               </div>
@@ -1491,6 +1422,11 @@ export default function App() {
                             <>
                               <Shield className="w-3 h-3 mr-1.5 animate-pulse" />{" "}
                               Routing…
+                            </>
+                          ) : actorError ? (
+                            <>
+                              <RefreshCw className="w-3 h-3 mr-1.5" />
+                              Retry
                             </>
                           ) : !actor ? (
                             <>
@@ -1798,6 +1734,11 @@ export default function App() {
                         <span className="flex items-center gap-1.5">
                           <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
                           Routing…
+                        </span>
+                      ) : actorError ? (
+                        <span className="flex items-center gap-1.5">
+                          <RefreshCw className="w-3 h-3" />
+                          Retry
                         </span>
                       ) : !actor ? (
                         <span className="flex items-center gap-1.5">
@@ -3414,8 +3355,16 @@ export default function App() {
                       {Number(myIcpDeposit) < Number(registrationFee) && (
                         <Button
                           className="w-full rounded-xl bg-amber-600/80 hover:bg-amber-500/80 text-white gap-2"
-                          disabled={regLoading || !actor || actorFetching}
+                          disabled={
+                            regLoading ||
+                            (!actor && !actorError) ||
+                            actorFetching
+                          }
                           onClick={async () => {
+                            if (actorError && !actor) {
+                              retryActor();
+                              return;
+                            }
                             if (!actor) return;
                             setRegLoading(true);
                             try {
@@ -3457,7 +3406,9 @@ export default function App() {
                           Number(myIcpDeposit) < Number(registrationFee) ||
                           regLoading
                         }
-                        onClick={() => setRegStep(3)}
+                        onClick={() => {
+                          setRegStep(3);
+                        }}
                         data-ocid="partners.form.submit"
                       >
                         Deploy Channel →
@@ -3533,11 +3484,22 @@ export default function App() {
                       </Button>
                       <Button
                         className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white gap-2"
-                        disabled={regLoading || !actor || actorFetching}
+                        disabled={
+                          regLoading || (!actor && !actorError) || actorFetching
+                        }
                         onClick={async () => {
-                          if (!actor) return;
+                          if (actorError && !actor) {
+                            retryActor();
+                            return;
+                          }
                           setRegLoading(true);
                           try {
+                            if (!actor) {
+                              toast.error(
+                                "Actor not ready. Please wait and try again.",
+                              );
+                              return;
+                            }
                             const record = await actor.registerPartner({
                               name: newPartnerForm.name,
                               description: newPartnerForm.description,
@@ -3553,8 +3515,12 @@ export default function App() {
                             toast.success(
                               `🎉 Channel "${record.name}" deployed!`,
                             );
-                          } catch {
-                            toast.error("Deployment failed. Please try again.");
+                          } catch (err) {
+                            const msg =
+                              err instanceof Error ? err.message : String(err);
+                            toast.error(
+                              `Deployment failed: ${msg.slice(0, 120)}`,
+                            );
                           } finally {
                             setRegLoading(false);
                           }
@@ -3565,6 +3531,10 @@ export default function App() {
                           <>
                             <Loader2 className="w-4 h-4 animate-spin" />{" "}
                             Deploying canister...
+                          </>
+                        ) : actorError ? (
+                          <>
+                            <RefreshCw className="w-4 h-4" /> Retry Connection
                           </>
                         ) : !actor || actorFetching ? (
                           <>

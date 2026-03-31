@@ -155,6 +155,7 @@ export interface backendInterface {
     getPartners(): Promise<Array<PartnerRecord>>;
     getRegistrationFee(): Promise<bigint>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
+    claimOwnerIfFirst(): Promise<boolean>;
     isCallerAdmin(): Promise<boolean>;
     proxyFetch(url: string, method: string, body: string | null, extraHeaders: Array<[string, string]> | null): Promise<ProxyResponse>;
     registerPartner(input: RegisterPartnerInput): Promise<PartnerRecord>;
@@ -331,6 +332,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getUserProfile(arg0);
             return from_candid_opt_n8(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async claimOwnerIfFirst(): Promise<boolean> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.claimOwnerIfFirst();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.claimOwnerIfFirst();
+            return result;
         }
     }
     async isCallerAdmin(): Promise<boolean> {
