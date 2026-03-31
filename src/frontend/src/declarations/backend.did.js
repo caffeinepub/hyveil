@@ -13,11 +13,33 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const PartnerStatus = IDL.Variant({
+  'revoked' : IDL.Null,
+  'pending' : IDL.Null,
+  'approved' : IDL.Null,
+});
+export const PartnerRecord = IDL.Record({
+  'id' : IDL.Nat,
+  'status' : PartnerStatus,
+  'owner' : IDL.Principal,
+  'name' : IDL.Text,
+  'description' : IDL.Text,
+  'website' : IDL.Text,
+  'chains' : IDL.Vec(IDL.Text),
+  'registeredAt' : IDL.Int,
+  'canisterId' : IDL.Principal,
+});
 export const UserProfile = IDL.Record({ 'name' : IDL.Text });
 export const ProxyResponse = IDL.Record({
   'body' : IDL.Text,
   'statusCode' : IDL.Nat,
   'success' : IDL.Bool,
+});
+export const RegisterPartnerInput = IDL.Record({
+  'name' : IDL.Text,
+  'description' : IDL.Text,
+  'website' : IDL.Text,
+  'chains' : IDL.Vec(IDL.Text),
 });
 export const http_header = IDL.Record({
   'value' : IDL.Text,
@@ -40,9 +62,16 @@ export const TransformationOutput = IDL.Record({
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+  'approvePartner' : IDL.Func([IDL.Nat], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+  'depositIcp' : IDL.Func([IDL.Nat], [], []),
+  'getApprovedPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
   'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+  'getMyIcpBalance' : IDL.Func([], [IDL.Nat], ['query']),
+  'getMyPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
+  'getPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
+  'getRegistrationFee' : IDL.Func([], [IDL.Nat], ['query']),
   'getUserProfile' : IDL.Func(
       [IDL.Principal],
       [IDL.Opt(UserProfile)],
@@ -59,6 +88,8 @@ export const idlService = IDL.Service({
       [ProxyResponse],
       [],
     ),
+  'registerPartner' : IDL.Func([RegisterPartnerInput], [PartnerRecord], []),
+  'revokePartner' : IDL.Func([IDL.Nat], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'transform' : IDL.Func(
       [TransformationInput],
@@ -75,11 +106,33 @@ export const idlFactory = ({ IDL }) => {
     'user' : IDL.Null,
     'guest' : IDL.Null,
   });
+  const PartnerStatus = IDL.Variant({
+    'revoked' : IDL.Null,
+    'pending' : IDL.Null,
+    'approved' : IDL.Null,
+  });
+  const PartnerRecord = IDL.Record({
+    'id' : IDL.Nat,
+    'status' : PartnerStatus,
+    'owner' : IDL.Principal,
+    'name' : IDL.Text,
+    'description' : IDL.Text,
+    'website' : IDL.Text,
+    'chains' : IDL.Vec(IDL.Text),
+    'registeredAt' : IDL.Int,
+    'canisterId' : IDL.Principal,
+  });
   const UserProfile = IDL.Record({ 'name' : IDL.Text });
   const ProxyResponse = IDL.Record({
     'body' : IDL.Text,
     'statusCode' : IDL.Nat,
     'success' : IDL.Bool,
+  });
+  const RegisterPartnerInput = IDL.Record({
+    'name' : IDL.Text,
+    'description' : IDL.Text,
+    'website' : IDL.Text,
+    'chains' : IDL.Vec(IDL.Text),
   });
   const http_header = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
   const http_request_result = IDL.Record({
@@ -99,9 +152,16 @@ export const idlFactory = ({ IDL }) => {
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
+    'approvePartner' : IDL.Func([IDL.Nat], [], []),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
+    'depositIcp' : IDL.Func([IDL.Nat], [], []),
+    'getApprovedPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
     'getCallerUserRole' : IDL.Func([], [UserRole], ['query']),
+    'getMyIcpBalance' : IDL.Func([], [IDL.Nat], ['query']),
+    'getMyPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
+    'getPartners' : IDL.Func([], [IDL.Vec(PartnerRecord)], ['query']),
+    'getRegistrationFee' : IDL.Func([], [IDL.Nat], ['query']),
     'getUserProfile' : IDL.Func(
         [IDL.Principal],
         [IDL.Opt(UserProfile)],
@@ -118,6 +178,8 @@ export const idlFactory = ({ IDL }) => {
         [ProxyResponse],
         [],
       ),
+    'registerPartner' : IDL.Func([RegisterPartnerInput], [PartnerRecord], []),
+    'revokePartner' : IDL.Func([IDL.Nat], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'transform' : IDL.Func(
         [TransformationInput],

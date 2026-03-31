@@ -10,10 +10,30 @@ import type { ActorMethod } from '@icp-sdk/core/agent';
 import type { IDL } from '@icp-sdk/core/candid';
 import type { Principal } from '@icp-sdk/core/principal';
 
+export interface PartnerRecord {
+  'id' : bigint,
+  'status' : PartnerStatus,
+  'owner' : Principal,
+  'name' : string,
+  'description' : string,
+  'website' : string,
+  'chains' : Array<string>,
+  'registeredAt' : bigint,
+  'canisterId' : Principal,
+}
+export type PartnerStatus = { 'revoked' : null } |
+  { 'pending' : null } |
+  { 'approved' : null };
 export interface ProxyResponse {
   'body' : string,
   'statusCode' : bigint,
   'success' : boolean,
+}
+export interface RegisterPartnerInput {
+  'name' : string,
+  'description' : string,
+  'website' : string,
+  'chains' : Array<string>,
 }
 export interface TransformationInput {
   'context' : Uint8Array,
@@ -36,15 +56,24 @@ export interface http_request_result {
 }
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
+  'approvePartner' : ActorMethod<[bigint], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
+  'depositIcp' : ActorMethod<[bigint], undefined>,
+  'getApprovedPartners' : ActorMethod<[], Array<PartnerRecord>>,
   'getCallerUserProfile' : ActorMethod<[], [] | [UserProfile]>,
   'getCallerUserRole' : ActorMethod<[], UserRole>,
+  'getMyIcpBalance' : ActorMethod<[], bigint>,
+  'getMyPartners' : ActorMethod<[], Array<PartnerRecord>>,
+  'getPartners' : ActorMethod<[], Array<PartnerRecord>>,
+  'getRegistrationFee' : ActorMethod<[], bigint>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'isCallerAdmin' : ActorMethod<[], boolean>,
   'proxyFetch' : ActorMethod<
     [string, string, [] | [string], [] | [Array<[string, string]>]],
     ProxyResponse
   >,
+  'registerPartner' : ActorMethod<[RegisterPartnerInput], PartnerRecord>,
+  'revokePartner' : ActorMethod<[bigint], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
 }
