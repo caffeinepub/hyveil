@@ -805,26 +805,231 @@ export function AdminCreatorTemplate({ isAdmin }: Props) {
                   <p className="text-white/40 text-sm">Loading reels…</p>
                 </div>
               ) : videos.length === 0 ? (
-                <div
-                  className="flex flex-col items-center justify-center gap-4"
-                  style={{ height: "60vh" }}
-                  data-ocid="creator_template.empty_state"
-                >
-                  <div
-                    className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                    style={{ background: "rgba(236,72,153,0.1)" }}
-                  >
-                    <MicOff className="w-7 h-7" style={{ color: "#ec4899" }} />
-                  </div>
-                  <div className="text-center">
-                    <p className="text-white/70 font-medium">No reels yet</p>
-                    <p className="text-white/30 text-sm mt-1">
-                      {isAdmin
-                        ? "Upload your first video above"
-                        : "Check back soon"}
-                    </p>
-                  </div>
-                </div>
+                // Mock reel cards for demo — disappear once real videos are uploaded
+                <>
+                  {[
+                    {
+                      seed: "workout",
+                      title: "Morning Workout 🔥",
+                      likes: "1.2K",
+                      comments: "89",
+                    },
+                    {
+                      seed: "city",
+                      title: "City Life After Dark 🌆",
+                      likes: "3.4K",
+                      comments: "214",
+                    },
+                    {
+                      seed: "sunset",
+                      title: "Sunset Vibes ✨",
+                      likes: "2.1K",
+                      comments: "156",
+                    },
+                    {
+                      seed: "art",
+                      title: "Street Art Tour 🎨",
+                      likes: "987",
+                      comments: "73",
+                    },
+                    {
+                      seed: "tech",
+                      title: "Tech Talk with ICP 💻",
+                      likes: "4.7K",
+                      comments: "331",
+                    },
+                  ].map((mock, idx) => (
+                    <div
+                      key={mock.seed}
+                      style={{
+                        scrollSnapAlign: "start",
+                        height: "100vh",
+                        position: "relative",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        background: "#0a0a0a",
+                      }}
+                      data-ocid={`creator_template.item.${idx + 1}`}
+                    >
+                      <div
+                        style={{
+                          width: "100%",
+                          maxWidth: 420,
+                          height: "100%",
+                          position: "relative",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {/* Poster image */}
+                        <img
+                          src={`https://picsum.photos/seed/${mock.seed}/400/700`}
+                          alt={mock.title}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                          }}
+                        />
+                        {/* Gradient overlay */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            inset: 0,
+                            background:
+                              "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 40%, transparent 70%)",
+                            pointerEvents: "none",
+                          }}
+                        />
+                        {/* Demo badge */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 16,
+                            left: 16,
+                            background: "rgba(236,72,153,0.25)",
+                            border: "1px solid rgba(236,72,153,0.5)",
+                            borderRadius: 8,
+                            padding: "3px 10px",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: "#f9a8d4",
+                            backdropFilter: "blur(8px)",
+                          }}
+                        >
+                          Demo Content
+                        </div>
+                        {/* Title */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: 80,
+                            left: 16,
+                            right: 80,
+                          }}
+                        >
+                          <p
+                            style={{
+                              color: "#fff",
+                              fontWeight: 700,
+                              fontSize: 16,
+                              textShadow: "0 1px 4px rgba(0,0,0,0.8)",
+                            }}
+                          >
+                            {mock.title}
+                          </p>
+                        </div>
+                        {/* Action buttons */}
+                        <div
+                          style={{
+                            position: "absolute",
+                            right: 12,
+                            bottom: 80,
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 20,
+                          }}
+                        >
+                          <button
+                            type="button"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <Heart
+                              style={{
+                                color: "#fff",
+                                width: 28,
+                                height: 28,
+                                filter:
+                                  "drop-shadow(0 1px 3px rgba(0,0,0,0.6))",
+                              }}
+                            />
+                            <span
+                              style={{
+                                color: "#fff",
+                                fontSize: 12,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {mock.likes}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <MessageCircle
+                              style={{
+                                color: "#fff",
+                                width: 28,
+                                height: 28,
+                                filter:
+                                  "drop-shadow(0 1px 3px rgba(0,0,0,0.6))",
+                              }}
+                            />
+                            <span
+                              style={{
+                                color: "#fff",
+                                fontSize: 12,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {mock.comments}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              gap: 4,
+                            }}
+                          >
+                            <Share2
+                              style={{
+                                color: "#fff",
+                                width: 28,
+                                height: 28,
+                                filter:
+                                  "drop-shadow(0 1px 3px rgba(0,0,0,0.6))",
+                              }}
+                            />
+                            <span
+                              style={{
+                                color: "#fff",
+                                fontSize: 12,
+                                fontWeight: 600,
+                              }}
+                            >
+                              Share
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
               ) : (
                 videos.map((video, idx) => (
                   <ReelCard

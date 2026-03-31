@@ -25,7 +25,6 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   BarChart3,
-  Bot,
   Building2,
   CheckCircle2,
   ChevronRight,
@@ -79,7 +78,6 @@ type Tab =
   | "wallet"
   | "revenue"
   | "partners"
-  | "agents"
   | "template"
   | "creator";
 
@@ -165,17 +163,6 @@ function saveProxyHistory(entries: ProxyLogEntry[]) {
   try {
     localStorage.setItem(PROXY_HISTORY_KEY, JSON.stringify(entries));
   } catch {}
-}
-
-interface AIAgent {
-  id: string;
-  name: string;
-  description: string;
-  chain: string;
-  category: string;
-  agentType: string;
-  website: string;
-  status: "pending_review" | "approved" | "rejected";
 }
 
 const DAPPS: DApp[] = [
@@ -379,93 +366,6 @@ const INITIAL_PROXY_SERVICES: ProxyService[] = [
 
 const INITIAL_TRANSACTIONS: Transaction[] = [];
 
-const SAMPLE_AGENTS: AIAgent[] = [
-  {
-    id: "a1",
-    name: "Kinic AI",
-    description: "On-chain AI search and knowledge agent on ICP",
-    chain: "ICP",
-    category: "Search",
-    agentType: "Knowledge Agent",
-    website: "https://74iy7-xqaaa-aaaaf-qagra-cai.ic0.app",
-    status: "pending_review",
-  },
-  {
-    id: "a2",
-    name: "ArcMind AI",
-    description:
-      "Autonomous AI agent running entirely on-chain via ICP canisters",
-    chain: "ICP",
-    category: "Autonomous",
-    agentType: "Autonomous Agent",
-    website: "https://arcmindai.app",
-    status: "approved",
-  },
-  {
-    id: "a3",
-    name: "Elna AI",
-    description: "Decentralized AI chatbot and agent platform on ICP",
-    chain: "ICP",
-    category: "Chatbot",
-    agentType: "Conversational Agent",
-    website: "https://elna.ai",
-    status: "pending_review",
-  },
-  {
-    id: "a4",
-    name: "Bittensor",
-    description: "Decentralized machine learning network with AI subnet agents",
-    chain: "Multi-Chain",
-    category: "ML Network",
-    agentType: "ML Agent",
-    website: "https://bittensor.com",
-    status: "pending_review",
-  },
-  {
-    id: "a5",
-    name: "Fetch.ai",
-    description:
-      "Autonomous economic agents for DeFi, supply chain, and data markets",
-    chain: "Ethereum",
-    category: "Economic",
-    agentType: "Economic Agent",
-    website: "https://fetch.ai",
-    status: "pending_review",
-  },
-  {
-    id: "a6",
-    name: "Autonolas",
-    description:
-      "Open platform for building autonomous agent services on-chain",
-    chain: "Multi-Chain",
-    category: "Infrastructure",
-    agentType: "Service Agent",
-    website: "https://olas.network",
-    status: "approved",
-  },
-  {
-    id: "a7",
-    name: "Morpheus",
-    description: "Decentralized AI agent marketplace with smart agent routing",
-    chain: "Ethereum",
-    category: "Marketplace",
-    agentType: "Routing Agent",
-    website: "https://mor.org",
-    status: "rejected",
-  },
-  {
-    id: "a8",
-    name: "ICP GPT",
-    description:
-      "GPT-powered agent with direct ICP canister memory and compute",
-    chain: "ICP",
-    category: "GPT Agent",
-    agentType: "Language Agent",
-    website: "https://icgpt.app",
-    status: "pending_review",
-  },
-];
-
 const REVENUE_TABLE: {
   tx: string;
   dapp: string;
@@ -486,7 +386,7 @@ const CATEGORIES = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [activeTab, setActiveTab] = useState<Tab>("content");
   const { identity, login, clear } = useInternetIdentity();
   const isLoggedIn = !!identity && !identity.getPrincipal().isAnonymous();
   const { actor, isFetching: actorFetching } = useActor();
@@ -548,12 +448,6 @@ export default function App() {
     description: "",
     chains: ["ICP"] as string[],
   });
-
-  const [agents, setAgents] = useState<AIAgent[]>(SAMPLE_AGENTS);
-  const [agentFilter, setAgentFilter] = useState<
-    "all" | "pending_review" | "approved" | "rejected"
-  >("all");
-  const [agentChainFilter, setAgentChainFilter] = useState("All");
 
   const [myChannels, setMyChannels] = useState<ChannelRevenue[]>([]);
   const [platformRevenue, setPlatformRevenue] =
@@ -968,17 +862,17 @@ export default function App() {
   }
 
   const NAV_TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    {
-      id: "dashboard",
-      label: "Dashboard",
-      icon: <Layers className="w-3.5 h-3.5" />,
-    },
+    { id: "content", label: "Content", icon: <Film className="w-3.5 h-3.5" /> },
     {
       id: "discover",
       label: "Discover",
       icon: <Globe className="w-3.5 h-3.5" />,
     },
-    { id: "content", label: "Content", icon: <Film className="w-3.5 h-3.5" /> },
+    {
+      id: "dashboard",
+      label: "Dashboard",
+      icon: <Layers className="w-3.5 h-3.5" />,
+    },
     { id: "proxy", label: "Proxy", icon: <Shield className="w-3.5 h-3.5" /> },
     { id: "wallet", label: "Wallet", icon: <Wallet className="w-3.5 h-3.5" /> },
     {
@@ -999,11 +893,6 @@ export default function App() {
       id: "partners",
       label: "Partners",
       icon: <Handshake className="w-3.5 h-3.5" />,
-    },
-    {
-      id: "agents",
-      label: "AI Agents",
-      icon: <Bot className="w-3.5 h-3.5" />,
     },
     ...(isAdmin
       ? [
@@ -1707,6 +1596,115 @@ export default function App() {
           (() => {
             // Use on-chain approved partners if available, else show empty state
             const onChainApproved = approvedPartners;
+            // Show mock channels when no on-chain partners registered yet
+            if (onChainApproved.length === 0) {
+              const mockChannels = [
+                {
+                  name: "NexaFit",
+                  desc: "Premium fitness reels & workout plans",
+                  chains: ["ICP"],
+                },
+                {
+                  name: "CryptoReels",
+                  desc: "Daily crypto market analysis & insights",
+                  chains: ["ICP", "ETH"],
+                },
+                {
+                  name: "ArtVault",
+                  desc: "Exclusive digital art collections & drops",
+                  chains: ["ICP", "BTC"],
+                },
+                {
+                  name: "GlowBeauty",
+                  desc: "Beauty tutorials & exclusive product launches",
+                  chains: ["ICP"],
+                },
+                {
+                  name: "TechPulse",
+                  desc: "Short-form tech reviews & ICP ecosystem news",
+                  chains: ["ICP"],
+                },
+                {
+                  name: "NightOwl Music",
+                  desc: "Underground music & artist spotlights",
+                  chains: ["ICP", "SOL"],
+                },
+              ];
+              return (
+                <div className="fade-up space-y-6">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <h2 className="text-2xl font-display font-bold mb-1">
+                        Partner Channels
+                      </h2>
+                      <p className="text-muted-foreground text-sm">
+                        Live channels from approved partners · HYVEIL earns 10%
+                        commission
+                      </p>
+                      <p className="text-xs text-white/30 mt-1 italic">
+                        Showing demo channels — register as a partner to go live
+                      </p>
+                    </div>
+                    <div className="glass rounded-xl px-3 py-1.5 flex items-center gap-2 text-xs text-amber-300 border border-amber-500/20">
+                      <Percent className="w-3 h-3" /> 10% platform commission
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {mockChannels.map((mc, i) => (
+                      <div
+                        key={mc.name}
+                        className="glass-card rounded-2xl p-5 space-y-3 flex flex-col opacity-90"
+                        data-ocid={`content.item.${i + 1}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-display font-bold text-lg">
+                              {mc.name}
+                            </div>
+                            <div className="font-mono text-[10px] text-white/20 mt-0.5 truncate max-w-[160px]">
+                              xxxxxxxx-xxxx.icp0.io
+                            </div>
+                          </div>
+                          <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 flex-shrink-0">
+                            DEMO
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground leading-relaxed flex-1">
+                          {mc.desc}
+                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="flex items-center gap-1 text-[9px] text-violet-300 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded">
+                            <Lock className="w-2.5 h-2.5" /> HYVEIL Template
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {mc.chains.map((c) => (
+                            <span
+                              key={c}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-500/20 text-violet-300"
+                            >
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                        <Button
+                          className="w-full rounded-xl bg-violet-600/10 text-violet-300/50 border border-violet-500/10 gap-2 cursor-not-allowed"
+                          disabled
+                          data-ocid={`content.watch.button.${i + 1}`}
+                          onClick={() =>
+                            toast(
+                              "Register as a partner to create your own channel",
+                            )
+                          }
+                        >
+                          <Play className="w-3.5 h-3.5" /> Browse Channel
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
             // Show on-chain approved partner channels if any
             if (onChainApproved.length > 0) {
               return (
@@ -3641,283 +3639,6 @@ export default function App() {
                 )}
               </div>
             )}
-          </div>
-        )}
-
-        {activeTab === "agents" && (
-          <div className="fade-up space-y-6">
-            {/* Header */}
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center"
-                  style={{
-                    background: "linear-gradient(135deg, #7c3aed33, #4f46e533)",
-                  }}
-                >
-                  <Bot className="w-5 h-5 text-violet-400" />
-                </div>
-                <h2 className="text-2xl font-display font-bold bg-gradient-to-r from-violet-300 to-indigo-300 bg-clip-text text-transparent">
-                  AI Agent Marketplace
-                </h2>
-              </div>
-              <p className="text-sm text-muted-foreground ml-12">
-                Review and approve AI agents for integration with HYVEIL
-              </p>
-            </div>
-
-            {/* Stats */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                {
-                  label: "Total Agents",
-                  value: agents.length,
-                  icon: <Bot className="w-4 h-4 text-violet-400" />,
-                },
-                {
-                  label: "Pending Review",
-                  value: agents.filter((a) => a.status === "pending_review")
-                    .length,
-                  icon: <Activity className="w-4 h-4 text-amber-400" />,
-                },
-                {
-                  label: "Approved",
-                  value: agents.filter((a) => a.status === "approved").length,
-                  icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
-                },
-                {
-                  label: "Rejected",
-                  value: agents.filter((a) => a.status === "rejected").length,
-                  icon: <X className="w-4 h-4 text-red-400" />,
-                },
-              ].map((stat, i) => (
-                <div
-                  key={stat.label}
-                  className="glass-card rounded-2xl p-5"
-                  data-ocid={`agents.stat.item.${i + 1}`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs text-muted-foreground">
-                      {stat.label}
-                    </span>
-                    {stat.icon}
-                  </div>
-                  <div className="text-xl font-display font-bold">
-                    {stat.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Filters */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Status:</span>
-                {(
-                  ["all", "pending_review", "approved", "rejected"] as const
-                ).map((f) => (
-                  <button
-                    type="button"
-                    key={f}
-                    onClick={() => setAgentFilter(f)}
-                    data-ocid="agents.filter.tab"
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                      agentFilter === f
-                        ? "bg-violet-600/30 border-violet-400/60 text-violet-200"
-                        : "bg-white/5 border-white/10 text-muted-foreground hover:border-white/20"
-                    }`}
-                  >
-                    {f === "all"
-                      ? "All"
-                      : f === "pending_review"
-                        ? "Pending Review"
-                        : f.charAt(0).toUpperCase() + f.slice(1)}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Chain:</span>
-                {["All", "ICP", "Ethereum", "Multi-Chain"].map((c) => (
-                  <button
-                    type="button"
-                    key={c}
-                    onClick={() => setAgentChainFilter(c)}
-                    data-ocid="agents.chain.tab"
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${
-                      agentChainFilter === c
-                        ? c === "ICP"
-                          ? "bg-violet-600/30 border-violet-400/60 text-violet-200"
-                          : c === "Ethereum"
-                            ? "bg-blue-600/30 border-blue-400/60 text-blue-200"
-                            : c === "Multi-Chain"
-                              ? "bg-emerald-600/30 border-emerald-400/60 text-emerald-200"
-                              : "bg-violet-600/30 border-violet-400/60 text-violet-200"
-                        : "bg-white/5 border-white/10 text-muted-foreground hover:border-white/20"
-                    }`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Agent Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {agents
-                .filter(
-                  (a) => agentFilter === "all" || a.status === agentFilter,
-                )
-                .filter(
-                  (a) =>
-                    agentChainFilter === "All" || a.chain === agentChainFilter,
-                )
-                .map((agent, i) => (
-                  <div
-                    key={agent.id}
-                    className="glass-card rounded-2xl p-5 relative overflow-hidden"
-                    data-ocid={`agents.item.${i + 1}`}
-                  >
-                    {/* Chain badge */}
-                    <div className="absolute top-4 right-4">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                          agent.chain === "ICP"
-                            ? "bg-violet-500/25 text-violet-300 border border-violet-500/30"
-                            : agent.chain === "Ethereum"
-                              ? "bg-blue-500/25 text-blue-300 border border-blue-500/30"
-                              : agent.chain === "Multi-Chain"
-                                ? "bg-emerald-500/25 text-emerald-300 border border-emerald-500/30"
-                                : "bg-slate-500/25 text-slate-300 border border-slate-500/30"
-                        }`}
-                      >
-                        {agent.chain}
-                      </span>
-                    </div>
-                    <div className="mb-3 pr-20">
-                      <div className="font-display font-bold text-base mb-0.5">
-                        {agent.name}
-                      </div>
-                      <div className="text-xs text-muted-foreground/70 italic">
-                        {agent.agentType}
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
-                      {agent.description}
-                    </p>
-                    <div className="flex items-center justify-between mb-4">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-white/5 border border-white/10 text-muted-foreground">
-                        {agent.category}
-                      </span>
-                      <a
-                        href={agent.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors"
-                        data-ocid="agents.link"
-                      >
-                        <ExternalLink className="w-3 h-3" /> Visit
-                      </a>
-                    </div>
-                    {/* Action row */}
-                    <div className="flex gap-2">
-                      {agent.status === "pending_review" && (
-                        <>
-                          <Button
-                            size="sm"
-                            className="flex-1 rounded-lg text-xs h-8 bg-emerald-600/20 hover:bg-emerald-600/40 border border-emerald-500/30 text-emerald-300"
-                            onClick={() => {
-                              setAgents((prev) =>
-                                prev.map((a) =>
-                                  a.id === agent.id
-                                    ? { ...a, status: "approved" as const }
-                                    : a,
-                                ),
-                              );
-                              toast.success(`${agent.name} approved!`);
-                            }}
-                            data-ocid="agents.approve.button"
-                          >
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="flex-1 rounded-lg text-xs h-8 bg-red-600/20 hover:bg-red-600/40 border border-red-500/30 text-red-300"
-                            onClick={() => {
-                              setAgents((prev) =>
-                                prev.map((a) =>
-                                  a.id === agent.id
-                                    ? { ...a, status: "rejected" as const }
-                                    : a,
-                                ),
-                              );
-                              toast.error(`${agent.name} rejected.`);
-                            }}
-                            data-ocid="agents.delete_button"
-                          >
-                            Reject
-                          </Button>
-                        </>
-                      )}
-                      {agent.status === "approved" && (
-                        <div className="flex items-center justify-between w-full">
-                          <span className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Approved
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="rounded-lg text-xs h-7 px-2.5 border border-white/10 hover:border-red-500/30 text-muted-foreground hover:text-red-300"
-                            onClick={() => {
-                              setAgents((prev) =>
-                                prev.map((a) =>
-                                  a.id === agent.id
-                                    ? {
-                                        ...a,
-                                        status: "pending_review" as const,
-                                      }
-                                    : a,
-                                ),
-                              );
-                              toast.info(`${agent.name} moved back to review.`);
-                            }}
-                            data-ocid="agents.secondary_button"
-                          >
-                            Revoke
-                          </Button>
-                        </div>
-                      )}
-                      {agent.status === "rejected" && (
-                        <div className="flex items-center justify-between w-full">
-                          <span className="flex items-center gap-1.5 text-xs text-red-400 font-medium">
-                            <X className="w-3.5 h-3.5" /> Rejected
-                          </span>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="rounded-lg text-xs h-7 px-2.5 border border-white/10 hover:border-amber-500/30 text-muted-foreground hover:text-amber-300"
-                            onClick={() => {
-                              setAgents((prev) =>
-                                prev.map((a) =>
-                                  a.id === agent.id
-                                    ? {
-                                        ...a,
-                                        status: "pending_review" as const,
-                                      }
-                                    : a,
-                                ),
-                              );
-                              toast.info(`${agent.name} reconsidered.`);
-                            }}
-                            data-ocid="agents.edit_button"
-                          >
-                            Reconsider
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-            </div>
           </div>
         )}
 
