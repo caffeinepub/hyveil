@@ -1,4 +1,3 @@
-
 import OutCall "http-outcalls/outcall";
 import Map "mo:core/Map";
 import Array "mo:core/Array";
@@ -7,19 +6,78 @@ import Runtime "mo:core/Runtime";
 import Time "mo:core/Time";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
+import Blob "mo:core/Blob";
 import AccessControl "authorization/access-control";
 
 import MixinAuthorization "authorization/MixinAuthorization";
 import MixinStorage "blob-storage/Mixin";
-import Storage "blob-storage/Storage";
 
 // Data migration with-clause
 
-actor {
+actor Main {
   // Authorization system setup
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
   include MixinStorage();
+
+  // --- Channel WASM Storage ---
+  var channelWasm : ?Blob = null;
+  var hyveilPrincipal : ?Principal = null;
+
+  public shared ({ caller }) func setChannelWasm(wasm : Blob) : async () {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can set channel WASM");
+    };
+    channelWasm := ?wasm;
+  };
+
+  public query func getChannelWasmStatus() : async { loaded : Bool; size : Nat } {
+    switch (channelWasm) {
+      case (null) { { loaded = false; size = 0 } };
+      case (?wasm) { { loaded = true; size = wasm.size() } };
+    };
+  };
+
+  public shared ({ caller }) func clearChannelWasm() : async () {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can clear channel WASM");
+    };
+    channelWasm := null;
+  };
+
+  public shared ({ caller }) func setHyveilPrincipal(p : Principal) : async () {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can set the HYVEIL principal");
+    };
+    hyveilPrincipal := ?p;
+  };
+
+  public query func getHyveilPrincipal() : async ?Principal {
+    hyveilPrincipal;
+  };
+
+  // --- IC Management Canister Interface ---
+  let icManagement = actor ("aaaaa-aa") : actor {
+    create_canister : shared ({
+      settings : ?{
+        controllers : ?[Principal];
+        compute_allocation : ?Nat;
+        memory_allocation : ?Nat;
+        freezing_threshold : ?Nat;
+      };
+    }) -> async { canister_id : Principal };
+    install_code : shared ({
+      mode : { #install; #upgrade; #reinstall };
+      canister_id : Principal;
+      wasm_module : Blob;
+      arg : Blob;
+    }) -> async ();
+  };
+
+  // Channel actor interface for post-deploy initialization
+  type ChannelActor = actor {
+    initialize : (Principal, Principal, Text, Text) -> async ();
+  };
 
   // User Profile Type and Management
   public type UserProfile = {
@@ -90,7 +148,7 @@ actor {
     icpBalances.add(caller, currentBalance + amount);
   };
 
-  public query ({ caller }) func getRegistrationFee() : async Nat {
+  public query func getRegistrationFee() : async Nat {
     50_000_000;
   };
 
@@ -116,6 +174,13 @@ actor {
       Runtime.trap("Unauthorized: Only authenticated users can register partners. Create a user profile first.");
     };
 
+    let wasm = switch (channelWasm) {
+      case (null) {
+        Runtime.trap("Channel WASM not loaded. Admin must call setChannelWasm first.");
+      };
+      case (?w) { w };
+    };
+
     let registrationFee = 50_000_000;
     let currentBalance = switch (icpBalances.get(caller)) {
       case (null) { 0 };
@@ -125,8 +190,39 @@ actor {
       Runtime.trap("Insufficient ICP balance for registration. You have " # currentBalance.toText() # " e8s, need " # registrationFee.toText() # " e8s. Deposit ICP first.");
     };
 
-    // Debit the registration fee
-    icpBalances.add(caller, currentBalance - registrationFee);
+    // Debit the registration fee (safe: checked above that currentBalance >= registrationFee)
+    let newBalance = currentBalance - registrationFee : Nat;
+    icpBalances.add(caller, newBalance);
+
+    // Determine treasury principal (HYVEIL itself)
+    let treasury = switch (hyveilPrincipal) {
+      case (?p) { p };
+      case (null) { Principal.fromActor(Main) };
+    };
+
+    // Create the new channel canister on ICP mainnet (attach 100B cycles to fund it)
+    let { canister_id = newCanisterId } = await (
+      with cycles = 100_000_000_000
+    ) icManagement.create_canister({
+      settings = ?{
+        controllers = ?[Principal.fromActor(Main), caller];
+        compute_allocation = null;
+        memory_allocation = null;
+        freezing_threshold = null;
+      };
+    });
+
+    // Install the HYVEIL channel template WASM into the new canister
+    await icManagement.install_code({
+      mode = #install;
+      canister_id = newCanisterId;
+      wasm_module = wasm;
+      arg = Blob.fromArray([]);
+    });
+
+    // Initialize the channel canister with owner and treasury
+    let channelActor : ChannelActor = actor (newCanisterId.toText());
+    await channelActor.initialize(caller, treasury, input.name, input.description);
 
     let partnerId = nextPartnerId;
     nextPartnerId += 1;
@@ -136,8 +232,8 @@ actor {
       owner = caller;
       name = input.name;
       description = input.description;
-      website = input.website;
-      canisterId = caller;
+      website = "https://" # newCanisterId.toText() # ".icp0.io";
+      canisterId = newCanisterId;
       status = #approved;
       registeredAt = Time.now();
       chains = input.chains;
@@ -155,9 +251,9 @@ actor {
     partners.values().toArray();
   };
 
-  public query ({ caller }) func getApprovedPartners() : async [PartnerRecord] {
+  public query func getApprovedPartners() : async [PartnerRecord] {
     partners.values().filter(
-      func(p) {
+      func(p : PartnerRecord) : Bool {
         p.status == #approved;
       }
     ).toArray();
@@ -168,7 +264,7 @@ actor {
       Runtime.trap("Unauthorized: Only authenticated users can view their partners");
     };
     partners.values().filter(
-      func(p) {
+      func(p : PartnerRecord) : Bool {
         p.owner == caller;
       }
     ).toArray();
@@ -250,14 +346,13 @@ actor {
       contentType = contentType;
       createdAt = Time.now();
     };
-
     contentItems.add(contentId, newContent);
     newContent;
   };
 
   public query ({ caller }) func getContentItems(partnerId : Nat) : async [ContentItem] {
     contentItems.values().filter(
-      func(item) {
+      func(item : ContentItem) : Bool {
         item.partnerId == partnerId;
       }
     ).toArray();
@@ -290,7 +385,8 @@ actor {
 
     let totalAmount = content.priceE8s;
     let creatorShare = (totalAmount * 90) / 100;
-    let hyveilShare = totalAmount - creatorShare;
+    // Safe: creatorShare <= totalAmount because 90/100 <= 1
+    let hyveilShare = totalAmount - creatorShare : Nat;
 
     let purchaseId = nextPurchaseId;
     nextPurchaseId += 1;
@@ -328,7 +424,7 @@ actor {
 
   public query ({ caller }) func getPartnerRevenue(partnerId : Nat) : async RevenueStats {
     let partnerPurchases = purchases.values().filter(
-      func(p) {
+      func(p : PurchaseRecord) : Bool {
         p.partnerId == partnerId;
       }
     ).toArray();
@@ -367,15 +463,15 @@ actor {
     };
 
     let myPartners = partners.values().filter(
-      func(p) {
+      func(p : PartnerRecord) : Bool {
         p.owner == caller;
       }
     ).toArray();
 
     myPartners.map<PartnerRecord, ChannelRevenue>(
-      func(partner) {
+      func(partner : PartnerRecord) : ChannelRevenue {
         let partnerPurchases = purchases.values().filter(
-          func(p) {
+          func(p : PurchaseRecord) : Bool {
             p.partnerId == partner.id;
           }
         ).toArray();
@@ -482,7 +578,7 @@ actor {
 
   func convertHeaders(headers : [(Text, Text)]) : [OutCall.Header] {
     headers.map<(Text, Text), OutCall.Header>(
-      func(tuple) {
+      func(tuple : (Text, Text)) : OutCall.Header {
         {
           name = tuple.0;
           value = tuple.1;

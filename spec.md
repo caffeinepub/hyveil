@@ -1,38 +1,29 @@
-# HYVEIL
+# HYVEIL – Real Canister Factory Implementation
 
 ## Current State
-- AdminCreatorTemplate page: Instagram/Reels-like full-page admin template preview with video upload, autoplay, likes, comments, monetization toggle.
-- Creator tab (App.tsx): Accounting dashboard showing total earnings, HYVEIL commission, purchase count, and per-channel cards with revenue stats.
-- No transaction history, followers, or channel performance metrics anywhere.
+The `registerPartner()` function in `main.mo` sets `canisterId = caller` (a fake ID — no real canister is deployed). There is no IC management canister integration. The partner channel template does not exist as a deployable Motoko actor.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **AdminCreatorTemplate page** — Three new sections accessible via sub-tabs inside the page:
-  1. `Transactions` tab: per-channel transaction history table (buyer principal, content title, amount paid, creator share 90%, HYVEIL share 10%, timestamp). Seeded with realistic mock data.
-  2. `Followers` tab: follower list per channel — avatar placeholder, truncated principal, follow date, subscription status badge. Stats card at top showing total followers.
-  3. `Performance` tab: channel performance metrics — views chart (bar), top content list ranked by views/revenue, engagement rate, average watch time cards.
-- **Creator tab (App.tsx)** — Accounting dashboard enhancements:
-  - Full transaction history table (all channels combined) with channel name column, pagination or scroll.
-  - Channel list with canister ID, status, revenue per channel as rows.
-  - Follower totals per channel in the channel card.
+- `src/backend/channel.mo` — Partner channel canister template: content management, follower system, purchase/revenue tracking, 90/10 split recording, analytics, access control with `initialize(owner, treasury)` one-time init
+- `channelWasm: ?Blob` stored in `main.mo` — admin uploads compiled channel WASM after compilation
+- `setChannelWasm(wasm: Blob)` admin-only endpoint in main.mo
+- `getChannelWasmStatus()` public query in main.mo — returns whether WASM is loaded
+- Real IC management calls in `registerPartner()`: `create_canister` (with cycles from 0.5 ICP fee) then `install_code` (with channelWasm), then calls `initialize(caller, selfPrincipal)` on the new channel
+- Frontend: Admin panel shows WASM upload status and instructions for loading the channel WASM
+- Frontend: Partner registration shows clear error if WASM not yet loaded by admin
 
 ### Modify
-- AdminCreatorTemplate: Add sub-tab navigation (Reels | Transactions | Followers | Performance) at the top of the page.
-- Creator tab channel cards: Add follower count badge and link to channel performance.
+- `registerPartner()` in main.mo: replace `canisterId = caller` with real `create_canister` + `install_code` + `initialize` calls
+- Partner registration step 3 in frontend: show real deployed canister ID, link to channel URL
+- Dashboard admin section: add channel WASM status indicator
 
 ### Remove
-- Nothing removed.
+- Fake `canisterId = caller` assignment in registerPartner
+- Frontend mock canister IDs in partner registration flow
 
 ## Implementation Plan
-1. Update `AdminCreatorTemplate.tsx`:
-   - Add `activeSection` state: 'reels' | 'transactions' | 'followers' | 'performance'
-   - Add sub-tab nav row at top (below header)
-   - Add mock transaction data (10 entries), mock follower data (15 followers), mock performance data
-   - Build Transactions section: table with columns (Buyer, Content, Amount, Creator Share, HYVEIL Cut, Time)
-   - Build Followers section: stats card + follower list rows
-   - Build Performance section: stats cards (views, followers, revenue, engagement) + top content table + simple bar chart using CSS
-2. Update `App.tsx` Creator tab:
-   - Add full transaction history table below channel cards (combined, all channels)
-   - Add follower count to each channel card row
-   - Make channel list more structured with a clear list view
+1. Write `channel.mo` — standalone partner channel actor with initialize, content CRUD, followers, purchases, analytics
+2. Update `main.mo` — add channelWasm storage, setChannelWasm admin fn, IC management interface, real factory in registerPartner
+3. Update frontend — WASM status in admin dashboard, error state when WASM not loaded, real canister ID display after deploy

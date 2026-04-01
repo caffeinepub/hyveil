@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Activity,
+  AlertTriangle,
   ArrowDownLeft,
   ArrowUpRight,
   BarChart3,
@@ -29,6 +30,7 @@ import {
   CheckCircle2,
   ChevronRight,
   Clapperboard,
+  Code2,
   Coins,
   Copy,
   Edit3,
@@ -47,7 +49,9 @@ import {
   Radio,
   RefreshCw,
   Search,
+  Settings,
   Shield,
+  Trash2,
   TrendingUp,
   Unlock,
   Users,
@@ -470,6 +474,21 @@ export default function App() {
     new Set(),
   );
 
+  // Channel WASM status (admin)
+  const [wasmStatus, setWasmStatus] = useState<{
+    loaded: boolean;
+    size: number;
+  } | null>(null);
+  const [wasmStatusLoading, setWasmStatusLoading] = useState(false);
+  const [hyveilPrincipalInput, setHyveilPrincipalInput] = useState("");
+  const [storedHyveilPrincipal, setStoredHyveilPrincipal] = useState<
+    string | null
+  >(null);
+  const [hyveilPrincipalLoading, setHyveilPrincipalLoading] = useState(false);
+  const [wasmCheckForDeploy, setWasmCheckForDeploy] = useState<{
+    loaded: boolean;
+  } | null>(null);
+
   const [dubLanguage, setDubLanguage] = useState("en");
   const [subtitles, setSubtitles] = useState(true);
   const [regionAnon, setRegionAnon] = useState(true);
@@ -521,6 +540,19 @@ export default function App() {
         setMyPartners(myP);
         setOnChainPartners(allP);
         setIsAdmin(admin);
+        if (admin) {
+          // Fetch WASM status and HYVEIL principal for admin
+          (actor as any)
+            .getChannelWasmStatus?.()
+            .then((s: any) => setWasmStatus(s))
+            .catch(() => {});
+          (actor as any)
+            .getHyveilPrincipal?.()
+            .then((p: any) => {
+              if (p && p.length > 0) setStoredHyveilPrincipal(p[0].toString());
+            })
+            .catch(() => {});
+        }
       })
       .catch(() => {});
   }, [actor, isLoggedIn]);
@@ -1242,6 +1274,224 @@ export default function App() {
                         <p className="text-xs text-muted-foreground mt-0.5">
                           Platform-wide
                         </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Channel WASM Status (Admin Only) */}
+                {isAdmin && (
+                  <div>
+                    <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
+                      <Code2 className="w-4 h-4 text-violet-400" />
+                      Channel WASM Status
+                    </h3>
+                    {wasmStatus === null ? (
+                      <div className="glass-card rounded-2xl p-4 flex items-center gap-3">
+                        <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+                        <span className="text-sm text-muted-foreground">
+                          Checking WASM status…
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="ml-auto text-xs"
+                          onClick={async () => {
+                            if (!actor) return;
+                            setWasmStatusLoading(true);
+                            try {
+                              const s = await (
+                                actor as any
+                              ).getChannelWasmStatus?.();
+                              if (s) setWasmStatus(s);
+                            } catch {}
+                            setWasmStatusLoading(false);
+                          }}
+                          data-ocid="dashboard.wasm.refresh.button"
+                        >
+                          <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+                        </Button>
+                      </div>
+                    ) : !wasmStatus.loaded ? (
+                      <div className="glass-card rounded-2xl p-5 border border-amber-500/30 bg-amber-500/5 space-y-4">
+                        <div className="flex items-start gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                            <AlertTriangle className="w-5 h-5 text-amber-400" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-amber-300 mb-0.5">
+                              Channel WASM Not Loaded
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Before partners can deploy real canisters, you
+                              must compile{" "}
+                              <code className="bg-white/10 px-1 rounded text-amber-200">
+                                channel.mo
+                              </code>{" "}
+                              and upload the WASM binary.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="space-y-2 text-xs">
+                          <p className="font-semibold text-muted-foreground uppercase tracking-widest text-[10px]">
+                            Steps to load WASM
+                          </p>
+                          <div className="glass rounded-xl p-3 space-y-2 border border-white/[0.06]">
+                            <div className="flex gap-2">
+                              <span className="text-amber-400 font-mono font-bold shrink-0">
+                                1.
+                              </span>
+                              <span className="text-muted-foreground">
+                                Run{" "}
+                                <code className="bg-white/10 px-1 rounded text-amber-200">
+                                  dfx build channel
+                                </code>{" "}
+                                to compile the channel canister
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                              <span className="text-amber-400 font-mono font-bold shrink-0">
+                                2.
+                              </span>
+                              <div className="text-muted-foreground break-all">
+                                <span>Run:</span>
+                                <code className="block mt-1 bg-black/30 text-emerald-300 p-2 rounded-lg text-[10px] leading-relaxed">
+                                  {
+                                    'dfx canister call hyveil setChannelWasm "(blob "$(xxd -p -c 1000000 .dfx/local/canisters/channel/channel.wasm)")"'
+                                  }
+                                </code>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 rounded-lg text-xs"
+                          disabled={wasmStatusLoading}
+                          onClick={async () => {
+                            if (!actor) return;
+                            setWasmStatusLoading(true);
+                            try {
+                              const s = await (
+                                actor as any
+                              ).getChannelWasmStatus?.();
+                              if (s) setWasmStatus(s);
+                            } catch {}
+                            setWasmStatusLoading(false);
+                          }}
+                          data-ocid="dashboard.wasm.refresh.button"
+                        >
+                          {wasmStatusLoading ? (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-3 h-3 mr-1" />
+                          )}
+                          Refresh Status
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="glass-card rounded-2xl p-5 border border-emerald-500/30 bg-emerald-500/5 space-y-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-emerald-300">
+                              Channel WASM Loaded
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Size: {(wasmStatus.size / 1024).toFixed(1)} KB —
+                              Partners can deploy real canisters
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="ml-auto border border-red-500/30 text-red-400 hover:bg-red-500/10 rounded-lg text-xs"
+                            onClick={async () => {
+                              if (!actor) return;
+                              try {
+                                await (actor as any).clearChannelWasm?.();
+                                setWasmStatus({ loaded: false, size: 0 });
+                                toast.success("Channel WASM cleared");
+                              } catch {
+                                toast.error("Failed to clear WASM");
+                              }
+                            }}
+                            data-ocid="dashboard.wasm.clear.button"
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" /> Clear WASM
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Set HYVEIL Principal */}
+                    <div className="mt-3 glass-card rounded-2xl p-5 border border-violet-500/20 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Settings className="w-4 h-4 text-violet-400" />
+                        <span className="font-semibold text-sm">
+                          HYVEIL Canister Principal
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Set this to HYVEIL's own canister ID so the 90/10
+                        revenue split routes correctly.
+                      </p>
+                      {storedHyveilPrincipal && (
+                        <div className="glass rounded-lg px-3 py-2 text-xs font-mono text-cyan-300 border border-cyan-500/20 break-all">
+                          Current: {storedHyveilPrincipal}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Paste HYVEIL canister principal..."
+                          value={hyveilPrincipalInput}
+                          onChange={(e) =>
+                            setHyveilPrincipalInput(e.target.value)
+                          }
+                          className="glass border-white/10 rounded-xl text-xs h-9 font-mono"
+                          data-ocid="dashboard.hyveil_principal.input"
+                        />
+                        <Button
+                          size="sm"
+                          className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 shrink-0 text-xs"
+                          disabled={
+                            !hyveilPrincipalInput.trim() ||
+                            hyveilPrincipalLoading
+                          }
+                          onClick={async () => {
+                            if (!actor) return;
+                            setHyveilPrincipalLoading(true);
+                            try {
+                              const { Principal } = await import(
+                                "@icp-sdk/core/principal"
+                              );
+                              const p = Principal.fromText(
+                                hyveilPrincipalInput.trim(),
+                              );
+                              await (actor as any).setHyveilPrincipal?.(p);
+                              setStoredHyveilPrincipal(
+                                hyveilPrincipalInput.trim(),
+                              );
+                              setHyveilPrincipalInput("");
+                              toast.success(
+                                "HYVEIL principal set successfully",
+                              );
+                            } catch {
+                              toast.error("Invalid principal or call failed");
+                            }
+                            setHyveilPrincipalLoading(false);
+                          }}
+                          data-ocid="dashboard.hyveil_principal.save_button"
+                        >
+                          {hyveilPrincipalLoading ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            "Set"
+                          )}
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -3569,10 +3819,22 @@ export default function App() {
                             )}
                           </div>
                           <div className="font-mono text-[10px] text-cyan-400">
-                            {p.owner.toString().slice(0, 20)}...
+                            Owner: {p.owner.toString().slice(0, 20)}...
+                          </div>
+                          <div className="font-mono text-[10px] text-violet-400 mt-0.5">
+                            Canister: {p.canisterId.toString().slice(0, 27)}...
                           </div>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
+                          <a
+                            href={`https://${p.canisterId.toString()}.icp0.io`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs px-3 h-8 rounded-lg border border-white/10 text-cyan-300 hover:bg-white/5 transition-colors"
+                            data-ocid={`partners.link.${onChainPartners.indexOf(p) + 1}`}
+                          >
+                            <ExternalLink className="w-3 h-3" /> View Channel
+                          </a>
                           {p.status !== "approved" && (
                             <Button
                               size="sm"
@@ -4034,6 +4296,35 @@ export default function App() {
                 {/* STEP 3: Deploy */}
                 {regStep === 3 && (
                   <>
+                    {/* WASM check before deploy */}
+                    {wasmCheckForDeploy !== null &&
+                      !wasmCheckForDeploy.loaded && (
+                        <div className="glass-card rounded-2xl p-5 border border-amber-500/30 bg-amber-500/5 space-y-3">
+                          <div className="flex items-start gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                              <AlertTriangle className="w-5 h-5 text-amber-400" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-amber-300 mb-0.5">
+                                Cannot Deploy — Channel WASM Not Loaded
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                The HYVEIL admin must upload the channel
+                                template WASM before new channels can be
+                                deployed. Please contact the platform admin.
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            className="w-full rounded-xl border-white/10 text-sm"
+                            onClick={() => setRegStep(2)}
+                            data-ocid="partners.form.cancel.button"
+                          >
+                            ← Go Back
+                          </Button>
+                        </div>
+                      )}
                     <div className="glass rounded-2xl p-5 space-y-3 border border-violet-500/20">
                       <div className="font-semibold text-sm">
                         Ready to Deploy
@@ -4099,7 +4390,11 @@ export default function App() {
                       <Button
                         className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white gap-2"
                         disabled={
-                          regLoading || (!actor && !actorError) || actorFetching
+                          regLoading ||
+                          (!actor && !actorError) ||
+                          actorFetching ||
+                          (wasmCheckForDeploy !== null &&
+                            !wasmCheckForDeploy.loaded)
                         }
                         onClick={async () => {
                           if (actorError && !actor) {
@@ -4113,6 +4408,24 @@ export default function App() {
                                 "Actor not ready. Please wait and try again.",
                               );
                               return;
+                            }
+                            // Check WASM is loaded before deploying
+                            try {
+                              const ws = await (
+                                actor as any
+                              ).getChannelWasmStatus?.();
+                              if (ws) {
+                                setWasmCheckForDeploy(ws);
+                                if (!ws.loaded) {
+                                  toast.error(
+                                    "Channel WASM not loaded. Contact the platform admin.",
+                                  );
+                                  setRegLoading(false);
+                                  return;
+                                }
+                              }
+                            } catch {
+                              // If method doesn't exist yet, proceed anyway
                             }
                             const record = await actor.registerPartner({
                               name: newPartnerForm.name,
