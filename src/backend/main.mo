@@ -3,6 +3,7 @@ import Map "mo:core/Map";
 import Array "mo:core/Array";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
+import Cycles "mo:core/Cycles";
 import Time "mo:core/Time";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
@@ -149,7 +150,7 @@ actor Main {
   };
 
   public query func getRegistrationFee() : async Nat {
-    50_000_000;
+    100_000_000;
   };
 
   public query ({ caller }) func getMyIcpBalance() : async Nat {
@@ -181,7 +182,7 @@ actor Main {
       case (?w) { w };
     };
 
-    let registrationFee = 50_000_000;
+    let registrationFee = 100_000_000;
     let currentBalance = switch (icpBalances.get(caller)) {
       case (null) { 0 };
       case (?balance) { balance };
@@ -202,7 +203,7 @@ actor Main {
 
     // Create the new channel canister on ICP mainnet (attach 100B cycles to fund it)
     let { canister_id = newCanisterId } = await (
-      with cycles = 100_000_000_000
+      with cycles = 50_000_000_000
     ) icManagement.create_canister({
       settings = ?{
         controllers = ?[Principal.fromActor(Main), caller];
@@ -704,4 +705,11 @@ actor Main {
       };
     };
   };
+
+  // HYVEIL Cycles Reserve Monitor
+  public query func getHyveilCyclesBalance() : async Nat {
+    Cycles.balance();
+  };
+
+
 };

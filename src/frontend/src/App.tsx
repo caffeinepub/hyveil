@@ -33,6 +33,7 @@ import {
   Code2,
   Coins,
   Copy,
+  Cpu,
   Edit3,
   ExternalLink,
   Eye,
@@ -437,7 +438,7 @@ export default function App() {
   const [approvedPartners, setApprovedPartners] = useState<PartnerRecord[]>([]);
   const [myPartners, setMyPartners] = useState<PartnerRecord[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [registrationFee, setRegistrationFee] = useState<bigint>(50_000_000n);
+  const [registrationFee, setRegistrationFee] = useState<bigint>(100_000_000n);
   const [myIcpDeposit, setMyIcpDeposit] = useState<bigint>(0n);
   // 3-step registration flow
   const [regStep, setRegStep] = useState<1 | 2 | 3>(1);
@@ -445,7 +446,9 @@ export default function App() {
   const [regSuccess, setRegSuccess] = useState<{
     canisterId: string;
     name: string;
+    templateType?: string;
   } | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
   const [newPartnerForm, setNewPartnerForm] = useState({
     name: "",
     website: "",
@@ -454,6 +457,9 @@ export default function App() {
   });
 
   const [myChannels, setMyChannels] = useState<ChannelRevenue[]>([]);
+  const [hyveilCyclesBalance, setHyveilCyclesBalance] = useState<bigint | null>(
+    null,
+  );
   const [platformRevenue, setPlatformRevenue] =
     useState<PlatformRevenue | null>(null);
   const [channelContents, setChannelContents] = useState<
@@ -574,6 +580,10 @@ export default function App() {
       actor
         .getAllPartnersRevenue()
         .then(setPlatformRevenue)
+        .catch(() => {});
+      (actor as any)
+        .getHyveilCyclesBalance?.()
+        .then((bal: bigint) => setHyveilCyclesBalance(bal))
         .catch(() => {});
     }
   }, [isLoggedIn, actor, isAdmin]);
@@ -1276,6 +1286,89 @@ export default function App() {
                         </p>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* HYVEIL Cycles Reserve (Admin Only) */}
+                {isAdmin && (
+                  <div>
+                    <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
+                      <Cpu className="w-4 h-4 text-cyan-400" />
+                      HYVEIL Cycles Reserve
+                    </h3>
+                    <div className="glass-card rounded-2xl p-4">
+                      {hyveilCyclesBalance === null ? (
+                        <div className="flex items-center gap-3">
+                          <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                          <span className="text-sm text-muted-foreground">
+                            Loading cycles balance…
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="ml-auto text-xs"
+                            onClick={async () => {
+                              if (!actor) return;
+                              try {
+                                const bal = await (
+                                  actor as any
+                                ).getHyveilCyclesBalance?.();
+                                if (bal !== undefined)
+                                  setHyveilCyclesBalance(bal);
+                              } catch {}
+                            }}
+                          >
+                            <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between flex-wrap gap-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-1">
+                              Current Balance
+                            </p>
+                            <p className="text-2xl font-bold text-cyan-400">
+                              {(
+                                Number(hyveilCyclesBalance) / 1_000_000_000_000
+                              ).toFixed(3)}{" "}
+                              TC
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              Trillion Cycles
+                            </p>
+                            {hyveilCyclesBalance < 1_000_000_000_000n && (
+                              <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3" />
+                                Low reserve — top up HYVEIL&apos;s cycles
+                                balance
+                              </p>
+                            )}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs border border-cyan-400/20 hover:bg-cyan-400/10"
+                            onClick={async () => {
+                              if (!actor) return;
+                              try {
+                                const bal = await (
+                                  actor as any
+                                ).getHyveilCyclesBalance?.();
+                                if (bal !== undefined)
+                                  setHyveilCyclesBalance(bal);
+                              } catch {}
+                            }}
+                          >
+                            <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Each new partner channel consumes ~50B cycles (0.5 ICP
+                      worth). Top up HYVEIL&apos;s canister cycles when balance
+                      runs low.
+                    </p>
                   </div>
                 )}
 
@@ -2770,6 +2863,18 @@ export default function App() {
                   >
                     <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
                   </Button>
+                  <Button
+                    className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl"
+                    size="sm"
+                    onClick={() => {
+                      setShowPartnerForm(true);
+                      setSelectedTemplate("");
+                      setRegStep(1);
+                    }}
+                    data-ocid="creator.deploy_new.button"
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1.5" /> Deploy New Channel
+                  </Button>
                 </div>
 
                 {/* Summary cards */}
@@ -3912,6 +4017,7 @@ export default function App() {
               setRegStep(1);
               setRegSuccess(null);
               setRegLoading(false);
+              setSelectedTemplate("");
               setNewPartnerForm({
                 name: "",
                 website: "",
@@ -3923,561 +4029,722 @@ export default function App() {
           }}
         >
           <DialogContent className="glass-strong border-white/[0.08] rounded-2xl max-w-md">
-            <DialogHeader>
-              <DialogTitle className="font-display font-bold flex items-center gap-2">
-                <Handshake className="w-5 h-5 text-violet-400" />
-                Deploy Your Channel Canister
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground mt-1">
-                Step {regStep} of 3 —{" "}
-                {regStep === 1
-                  ? "Fill in your dApp info"
-                  : regStep === 2
-                    ? "Pay deployment fee"
-                    : "Deploy on ICP mainnet"}
-              </DialogDescription>
-            </DialogHeader>
-
-            {/* Step indicator */}
-            <div className="flex gap-2 mt-1">
-              {[1, 2, 3].map((s) => (
-                <div
-                  key={s}
-                  className={`h-1 flex-1 rounded-full transition-all ${s <= regStep ? "bg-violet-500" : "bg-white/10"}`}
-                />
-              ))}
-            </div>
-
-            {!isLoggedIn ? (
-              <div className="py-6 text-center space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto">
-                  <Lock className="w-7 h-7 text-amber-400" />
-                </div>
-                <div>
-                  <p className="font-semibold mb-1">
-                    Internet Identity Required
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Connect Internet Identity to register your channel and pay
-                    the deployment fee.
-                  </p>
-                </div>
-                <Button
-                  className="rounded-xl bg-violet-600 hover:bg-violet-500 text-white w-full"
-                  onClick={() => {
-                    setShowPartnerForm(false);
-                    login();
-                  }}
-                >
-                  <Shield className="w-4 h-4 mr-2" /> Connect Internet Identity
-                </Button>
-              </div>
-            ) : regSuccess ? (
-              /* Success Screen */
-              <div className="py-4 text-center space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-                </div>
-                <div>
-                  <h3 className="font-display font-bold text-lg text-emerald-300 mb-1">
-                    Channel Deployed!
-                  </h3>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Your canister is live on ICP mainnet. Your channel is now
-                    active and visible in the Content tab.
-                  </p>
-                  <div className="glass rounded-xl p-3 text-left space-y-2">
-                    <div className="text-xs text-muted-foreground">
-                      Channel Name
-                    </div>
-                    <div className="font-semibold">{regSuccess.name}</div>
-                    <div className="text-xs text-muted-foreground mt-2">
-                      Your Channel URL (auto-generated)
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="font-mono text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded break-all flex-1">
-                        https://{regSuccess.canisterId}.icp0.io
-                      </div>
+            {selectedTemplate === "" ? (
+              /* ── Template Picker ── */
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-display font-bold text-base">
+                    Choose Your Channel Template
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-muted-foreground mt-1">
+                    Select a template for your creator channel. You can deploy
+                    multiple channels with different templates.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 max-h-[60vh] overflow-y-auto pr-1">
+                  {[
+                    {
+                      id: "reels",
+                      label: "Short Video / Reels",
+                      icon: Film,
+                      description:
+                        "Instagram/TikTok-style reels, pay-per-view short video",
+                      live: true,
+                    },
+                    {
+                      id: "podcast",
+                      label: "Podcast / Audio",
+                      icon: Radio,
+                      description: "Episode listings, gated audio, show notes",
+                      live: false,
+                    },
+                    {
+                      id: "newsletter",
+                      label: "Newsletter / Blog",
+                      icon: Edit3,
+                      description:
+                        "Long-form posts with free preview + paid full-read",
+                      live: false,
+                    },
+                    {
+                      id: "events",
+                      label: "Live Event / Ticketing",
+                      icon: Clapperboard,
+                      description:
+                        "Events schedule, ICP ticket purchase, QR entry",
+                      live: false,
+                    },
+                    {
+                      id: "gallery",
+                      label: "NFT Gallery",
+                      icon: Layers,
+                      description: "Digital art showcase, pay-per-download",
+                      live: false,
+                    },
+                    {
+                      id: "course",
+                      label: "Course / Education",
+                      icon: Code2,
+                      description: "Module-based learning, paid course unlock",
+                      live: false,
+                    },
+                    {
+                      id: "community",
+                      label: "Community / Forum",
+                      icon: Users,
+                      description:
+                        "Gated discussion board, premium access tiers",
+                      live: false,
+                    },
+                  ].map((tmpl) => {
+                    const IconComp = tmpl.icon;
+                    return (
                       <button
+                        key={tmpl.id}
                         type="button"
-                        className="text-muted-foreground hover:text-white transition-colors"
-                        title="Copy URL"
                         onClick={() => {
-                          navigator.clipboard.writeText(
-                            `https://${regSuccess.canisterId}.icp0.io`,
-                          );
-                          toast.success("URL copied!");
-                        }}
-                      >
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-2">
-                      Canister ID
-                    </div>
-                    <div className="font-mono text-[11px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded break-all">
-                      {regSuccess.canisterId}
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-2 text-xs text-violet-300 bg-violet-500/10 border border-violet-500/20 rounded-lg px-2.5 py-1.5">
-                      <Lock className="w-3 h-3 flex-shrink-0" />
-                      <span>
-                        HYVEIL controls the template as canister controller. You
-                        manage content only.
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="glass rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-emerald-300 border border-emerald-500/20">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />{" "}
-                  Channel is live — your content is visible in the Content tab
-                  now
-                </div>
-                <Button
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white w-full"
-                  onClick={() =>
-                    window.open(
-                      `https://${regSuccess.canisterId}.icp0.io`,
-                      "_blank",
-                    )
-                  }
-                  data-ocid="partners.manage_channel.button"
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" /> Manage My Channel
-                </Button>
-                <Button
-                  className="rounded-xl bg-violet-600 hover:bg-violet-500 text-white w-full"
-                  onClick={() => {
-                    setShowPartnerForm(false);
-                    setRegStep(1);
-                    setRegSuccess(null);
-                    setNewPartnerForm({
-                      name: "",
-                      website: "",
-                      description: "",
-                      chains: ["ICP"],
-                    });
-                  }}
-                >
-                  Done
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-4 pt-2">
-                {/* STEP 1: Info */}
-                {regStep === 1 && (
-                  <>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">
-                        dApp Name
-                      </Label>
-                      <Input
-                        placeholder="e.g. OpenChat"
-                        value={newPartnerForm.name}
-                        onChange={(e) =>
-                          setNewPartnerForm((prev) => ({
-                            ...prev,
-                            name: e.target.value,
-                          }))
-                        }
-                        className="glass rounded-xl border-white/10"
-                        data-ocid="partners.form.name"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">
-                        Website URL
-                      </Label>
-                      <Input
-                        placeholder="https://yourdapp.app"
-                        value={newPartnerForm.website}
-                        onChange={(e) =>
-                          setNewPartnerForm((prev) => ({
-                            ...prev,
-                            website: e.target.value,
-                          }))
-                        }
-                        className="glass rounded-xl border-white/10"
-                        data-ocid="partners.form.input"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">
-                        Description
-                      </Label>
-                      <Textarea
-                        placeholder="Briefly describe your dApp..."
-                        value={newPartnerForm.description}
-                        onChange={(e) =>
-                          setNewPartnerForm((prev) => ({
-                            ...prev,
-                            description: e.target.value,
-                          }))
-                        }
-                        className="glass rounded-xl border-white/10 resize-none"
-                        rows={3}
-                        data-ocid="partners.form.textarea"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">
-                        Supported Chains
-                      </Label>
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          "ICP",
-                          "Ethereum",
-                          "Solana",
-                          "Bitcoin",
-                          "Polygon",
-                          "BNB Chain",
-                          "Avalanche",
-                          "Cosmos",
-                        ].map((chain) => {
-                          const checked = newPartnerForm.chains.includes(chain);
-                          return (
-                            <button
-                              key={chain}
-                              type="button"
-                              onClick={() =>
-                                setNewPartnerForm((prev) => ({
-                                  ...prev,
-                                  chains: checked
-                                    ? prev.chains.filter((c) => c !== chain)
-                                    : [...prev.chains, chain],
-                                }))
-                              }
-                              className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${checked ? (chain === "ICP" ? "bg-violet-500/30 border-violet-400/60 text-violet-200" : "bg-blue-500/30 border-blue-400/60 text-blue-200") : "bg-white/5 border-white/10 text-muted-foreground hover:border-white/20"}`}
-                              data-ocid="partners.toggle"
-                            >
-                              {chain}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                    <div className="flex gap-3 pt-2">
-                      <Button
-                        variant="ghost"
-                        className="flex-1 rounded-xl border-white/10"
-                        onClick={() => setShowPartnerForm(false)}
-                        data-ocid="partners.form.cancel.button"
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white"
-                        onClick={() => {
-                          if (!newPartnerForm.name || !newPartnerForm.website) {
-                            toast.error("Please fill in name and website");
+                          if (!tmpl.live) {
+                            toast.info(
+                              "Coming soon — only Short Video / Reels is available now",
+                            );
                             return;
                           }
-                          setRegStep(2);
+                          setSelectedTemplate(tmpl.id);
                         }}
-                        data-ocid="partners.form.submit"
+                        className={`glass-card rounded-xl p-4 text-left border transition-all flex flex-col gap-2 ${tmpl.live ? "border-white/10 hover:border-violet-500/50 hover:ring-1 hover:ring-violet-500/30 cursor-pointer" : "border-white/[0.05] opacity-60 cursor-not-allowed"}`}
                       >
-                        Next: Payment →
-                      </Button>
-                    </div>
-                  </>
-                )}
-
-                {/* STEP 2: Payment */}
-                {regStep === 2 && (
-                  <>
-                    <div className="glass rounded-2xl p-5 space-y-4 border border-violet-500/20">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
-                          <Coins className="w-5 h-5 text-amber-400" />
+                        <div className="flex items-start justify-between gap-2">
+                          <IconComp
+                            className={`w-7 h-7 mt-0.5 flex-shrink-0 ${tmpl.live ? "text-violet-400" : "text-muted-foreground"}`}
+                          />
+                          {tmpl.live ? (
+                            <span className="text-[10px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-full px-2 py-0.5">
+                              Live
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-semibold bg-white/5 text-muted-foreground border border-white/10 rounded-full px-2 py-0.5">
+                              Soon
+                            </span>
+                          )}
                         </div>
                         <div>
-                          <div className="font-display font-bold">
-                            Channel Deployment Fee
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            Required to deploy your canister on ICP mainnet
-                          </div>
+                          <p className="text-sm font-semibold leading-tight">
+                            {tmpl.label}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                            {tmpl.description}
+                          </p>
                         </div>
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Deployment fee
-                          </span>
-                          <span className="font-bold text-amber-300">
-                            {Number(registrationFee) / 100_000_000} ICP
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Your deposited balance
-                          </span>
-                          <span
-                            className={
-                              Number(myIcpDeposit) >= Number(registrationFee)
-                                ? "text-emerald-400 font-medium"
-                                : "text-red-400 font-medium"
-                            }
-                          >
-                            {Number(myIcpDeposit) / 100_000_000} ICP
-                          </span>
-                        </div>
-                      </div>
-                      <div className="glass rounded-xl p-3 text-xs text-muted-foreground leading-relaxed border border-white/[0.06]">
-                        💡 This ICP is used to purchase cycles for your
-                        dedicated channel canister on the ICP mainnet. Your
-                        channel will have its own canister ID, wallet, and
-                        storage.
-                      </div>
-                      {Number(myIcpDeposit) < Number(registrationFee) && (
-                        <Button
-                          className="w-full rounded-xl bg-amber-600/80 hover:bg-amber-500/80 text-white gap-2"
-                          disabled={
-                            regLoading ||
-                            (!actor && !actorError) ||
-                            actorFetching
-                          }
-                          onClick={async () => {
-                            if (actorError && !actor) {
-                              retryActor();
-                              return;
-                            }
-                            if (!actor) return;
-                            setRegLoading(true);
-                            try {
-                              await actor.depositIcp(registrationFee);
-                              await refreshMyBalance();
-                              toast.success(
-                                "Payment confirmed! Balance updated.",
-                              );
-                            } catch {
-                              toast.error("Payment failed. Please try again.");
-                            } finally {
-                              setRegLoading(false);
-                            }
-                          }}
-                          data-ocid="partners.form.submit"
-                        >
-                          {regLoading ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Coins className="w-4 h-4" />
-                          )}
-                          Confirm & Pay {Number(registrationFee) / 100_000_000}{" "}
-                          ICP
-                        </Button>
-                      )}
-                    </div>
-                    <div className="flex gap-3 pt-2">
-                      <Button
-                        variant="ghost"
-                        className="flex-1 rounded-xl border-white/10"
-                        onClick={() => setRegStep(1)}
-                        data-ocid="partners.form.cancel.button"
-                      >
-                        ← Back
-                      </Button>
-                      <Button
-                        className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white"
-                        disabled={
-                          Number(myIcpDeposit) < Number(registrationFee) ||
-                          regLoading
-                        }
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              /* ── Steps 1-3 ── */
+              <>
+                <DialogHeader>
+                  <DialogTitle className="font-display font-bold flex items-center gap-2">
+                    <Handshake className="w-5 h-5 text-violet-400" />
+                    Deploy Your Channel Canister
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-muted-foreground mt-1">
+                    <span className="inline-flex items-center gap-1.5">
+                      <button
+                        type="button"
                         onClick={() => {
-                          setRegStep(3);
+                          setSelectedTemplate("");
+                          setRegStep(1);
                         }}
-                        data-ocid="partners.form.submit"
+                        className="text-violet-400 hover:text-violet-300 underline underline-offset-2 text-xs"
                       >
-                        Deploy Channel →
-                      </Button>
-                    </div>
-                  </>
-                )}
+                        ← Change template
+                      </button>
+                      <span className="text-white/20">|</span>
+                      <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-full px-2 py-0.5 text-[10px] font-semibold">
+                        {selectedTemplate === "reels"
+                          ? "Short Video / Reels"
+                          : selectedTemplate}
+                      </span>
+                    </span>
+                    <span className="block mt-1">
+                      Step {regStep} of 3 —{" "}
+                      {regStep === 1
+                        ? "Fill in your dApp info"
+                        : regStep === 2
+                          ? "Pay deployment fee"
+                          : "Deploy on ICP mainnet"}
+                    </span>
+                  </DialogDescription>
+                </DialogHeader>
 
-                {/* STEP 3: Deploy */}
-                {regStep === 3 && (
-                  <>
-                    {/* WASM check before deploy */}
-                    {wasmCheckForDeploy !== null &&
-                      !wasmCheckForDeploy.loaded && (
-                        <div className="glass-card rounded-2xl p-5 border border-amber-500/30 bg-amber-500/5 space-y-3">
-                          <div className="flex items-start gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
-                              <AlertTriangle className="w-5 h-5 text-amber-400" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-amber-300 mb-0.5">
-                                Cannot Deploy — Channel WASM Not Loaded
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                The HYVEIL admin must upload the channel
-                                template WASM before new channels can be
-                                deployed. Please contact the platform admin.
-                              </p>
-                            </div>
+                {/* Step indicator */}
+                <div className="flex gap-2 mt-1">
+                  {[1, 2, 3].map((s) => (
+                    <div
+                      key={s}
+                      className={`h-1 flex-1 rounded-full transition-all ${s <= regStep ? "bg-violet-500" : "bg-white/10"}`}
+                    />
+                  ))}
+                </div>
+
+                {!isLoggedIn ? (
+                  <div className="py-6 text-center space-y-4">
+                    <div className="w-14 h-14 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto">
+                      <Lock className="w-7 h-7 text-amber-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-1">
+                        Internet Identity Required
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Connect Internet Identity to register your channel and
+                        pay the deployment fee.
+                      </p>
+                    </div>
+                    <Button
+                      className="rounded-xl bg-violet-600 hover:bg-violet-500 text-white w-full"
+                      onClick={() => {
+                        setShowPartnerForm(false);
+                        login();
+                      }}
+                    >
+                      <Shield className="w-4 h-4 mr-2" /> Connect Internet
+                      Identity
+                    </Button>
+                  </div>
+                ) : regSuccess ? (
+                  /* Success Screen */
+                  <div className="py-4 text-center space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="font-display font-bold text-lg text-emerald-300 mb-1">
+                        Channel Deployed!
+                      </h3>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Your canister is live on ICP mainnet. Your channel is
+                        now active and visible in the Content tab.
+                      </p>
+                      <div className="glass rounded-xl p-3 text-left space-y-2">
+                        <div className="text-xs text-muted-foreground">
+                          Channel Name
+                        </div>
+                        <div className="font-semibold">{regSuccess.name}</div>
+                        {regSuccess.templateType && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-full px-2 py-0.5 mt-1">
+                            <Film className="w-3 h-3" />
+                            {regSuccess.templateType === "reels"
+                              ? "Short Video / Reels"
+                              : regSuccess.templateType}
+                          </span>
+                        )}
+                        <div className="text-xs text-muted-foreground mt-2">
+                          Your Channel URL (auto-generated)
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-mono text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded break-all flex-1">
+                            https://{regSuccess.canisterId}.icp0.io
                           </div>
+                          <button
+                            type="button"
+                            className="text-muted-foreground hover:text-white transition-colors"
+                            title="Copy URL"
+                            onClick={() => {
+                              navigator.clipboard.writeText(
+                                `https://${regSuccess.canisterId}.icp0.io`,
+                              );
+                              toast.success("URL copied!");
+                            }}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-2">
+                          Canister ID
+                        </div>
+                        <div className="font-mono text-[11px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded break-all">
+                          {regSuccess.canisterId}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-2 text-xs text-violet-300 bg-violet-500/10 border border-violet-500/20 rounded-lg px-2.5 py-1.5">
+                          <Lock className="w-3 h-3 flex-shrink-0" />
+                          <span>
+                            HYVEIL controls the template as canister controller.
+                            You manage content only.
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="glass rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-emerald-300 border border-emerald-500/20">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />{" "}
+                      Channel is live — your content is visible in the Content
+                      tab now
+                    </div>
+                    <Button
+                      className="rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white w-full"
+                      onClick={() =>
+                        window.open(
+                          `https://${regSuccess.canisterId}.icp0.io`,
+                          "_blank",
+                        )
+                      }
+                      data-ocid="partners.manage_channel.button"
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" /> Manage My
+                      Channel
+                    </Button>
+                    <Button
+                      className="rounded-xl bg-violet-600 hover:bg-violet-500 text-white w-full"
+                      onClick={() => {
+                        setShowPartnerForm(false);
+                        setRegStep(1);
+                        setRegSuccess(null);
+                        setNewPartnerForm({
+                          name: "",
+                          website: "",
+                          description: "",
+                          chains: ["ICP"],
+                        });
+                      }}
+                    >
+                      Done
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4 pt-2">
+                    {/* STEP 1: Info */}
+                    {regStep === 1 && (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">
+                            dApp Name
+                          </Label>
+                          <Input
+                            placeholder="e.g. OpenChat"
+                            value={newPartnerForm.name}
+                            onChange={(e) =>
+                              setNewPartnerForm((prev) => ({
+                                ...prev,
+                                name: e.target.value,
+                              }))
+                            }
+                            className="glass rounded-xl border-white/10"
+                            data-ocid="partners.form.name"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">
+                            Website URL
+                          </Label>
+                          <Input
+                            placeholder="https://yourdapp.app"
+                            value={newPartnerForm.website}
+                            onChange={(e) =>
+                              setNewPartnerForm((prev) => ({
+                                ...prev,
+                                website: e.target.value,
+                              }))
+                            }
+                            className="glass rounded-xl border-white/10"
+                            data-ocid="partners.form.input"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">
+                            Description
+                          </Label>
+                          <Textarea
+                            placeholder="Briefly describe your dApp..."
+                            value={newPartnerForm.description}
+                            onChange={(e) =>
+                              setNewPartnerForm((prev) => ({
+                                ...prev,
+                                description: e.target.value,
+                              }))
+                            }
+                            className="glass rounded-xl border-white/10 resize-none"
+                            rows={3}
+                            data-ocid="partners.form.textarea"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">
+                            Supported Chains
+                          </Label>
+                          <div className="flex flex-wrap gap-2">
+                            {[
+                              "ICP",
+                              "Ethereum",
+                              "Solana",
+                              "Bitcoin",
+                              "Polygon",
+                              "BNB Chain",
+                              "Avalanche",
+                              "Cosmos",
+                            ].map((chain) => {
+                              const checked =
+                                newPartnerForm.chains.includes(chain);
+                              return (
+                                <button
+                                  key={chain}
+                                  type="button"
+                                  onClick={() =>
+                                    setNewPartnerForm((prev) => ({
+                                      ...prev,
+                                      chains: checked
+                                        ? prev.chains.filter((c) => c !== chain)
+                                        : [...prev.chains, chain],
+                                    }))
+                                  }
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${checked ? (chain === "ICP" ? "bg-violet-500/30 border-violet-400/60 text-violet-200" : "bg-blue-500/30 border-blue-400/60 text-blue-200") : "bg-white/5 border-white/10 text-muted-foreground hover:border-white/20"}`}
+                                  data-ocid="partners.toggle"
+                                >
+                                  {chain}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <div className="flex gap-3 pt-2">
                           <Button
                             variant="ghost"
-                            className="w-full rounded-xl border-white/10 text-sm"
-                            onClick={() => setRegStep(2)}
+                            className="flex-1 rounded-xl border-white/10"
+                            onClick={() => setShowPartnerForm(false)}
                             data-ocid="partners.form.cancel.button"
                           >
-                            ← Go Back
+                            Cancel
+                          </Button>
+                          <Button
+                            className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white"
+                            onClick={() => {
+                              if (
+                                !newPartnerForm.name ||
+                                !newPartnerForm.website
+                              ) {
+                                toast.error("Please fill in name and website");
+                                return;
+                              }
+                              setRegStep(2);
+                            }}
+                            data-ocid="partners.form.submit"
+                          >
+                            Next: Payment →
                           </Button>
                         </div>
-                      )}
-                    <div className="glass rounded-2xl p-5 space-y-3 border border-violet-500/20">
-                      <div className="font-semibold text-sm">
-                        Ready to Deploy
-                      </div>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Channel name
-                          </span>
-                          <span className="font-medium">
-                            {newPartnerForm.name}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Website</span>
-                          <span className="font-medium truncate max-w-[160px]">
-                            {newPartnerForm.website}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">Chains</span>
-                          <span className="font-medium">
-                            {newPartnerForm.chains.join(", ")}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-muted-foreground">
-                            Fee paid
-                          </span>
-                          <span className="text-emerald-400 font-medium">
-                            ✓ {Number(registrationFee) / 100_000_000} ICP
-                          </span>
-                        </div>
-                      </div>
-                      <div className="pt-1 border-t border-white/[0.06]" />
-                      <div className="glass rounded-xl p-3 text-xs leading-relaxed border border-violet-500/20 space-y-1">
-                        <div className="flex items-center gap-1.5 font-semibold text-violet-300">
-                          <Lock className="w-3.5 h-3.5" /> HYVEIL Template
-                          Control
-                        </div>
-                        <p className="text-muted-foreground">
-                          Your channel URL will be auto-generated upon
-                          deployment. HYVEIL remains the canister controller and
-                          enforces the channel template — partners populate
-                          content within the fixed layout.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="glass rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-violet-300 border border-violet-500/20">
-                      <Zap className="w-3.5 h-3.5" /> Deploying will create a
-                      live canister on ICP mainnet
-                    </div>
-                    <div className="flex gap-3 pt-2">
-                      <Button
-                        variant="ghost"
-                        className="flex-1 rounded-xl border-white/10"
-                        onClick={() => setRegStep(2)}
-                        disabled={regLoading}
-                        data-ocid="partners.form.cancel.button"
-                      >
-                        ← Back
-                      </Button>
-                      <Button
-                        className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white gap-2"
-                        disabled={
-                          regLoading ||
-                          (!actor && !actorError) ||
-                          actorFetching ||
-                          (wasmCheckForDeploy !== null &&
-                            !wasmCheckForDeploy.loaded)
-                        }
-                        onClick={async () => {
-                          if (actorError && !actor) {
-                            retryActor();
-                            return;
-                          }
-                          setRegLoading(true);
-                          try {
-                            if (!actor) {
-                              toast.error(
-                                "Actor not ready. Please wait and try again.",
-                              );
-                              return;
-                            }
-                            // Check WASM is loaded before deploying
-                            try {
-                              const ws = await (
-                                actor as any
-                              ).getChannelWasmStatus?.();
-                              if (ws) {
-                                setWasmCheckForDeploy(ws);
-                                if (!ws.loaded) {
-                                  toast.error(
-                                    "Channel WASM not loaded. Contact the platform admin.",
-                                  );
-                                  setRegLoading(false);
+                      </>
+                    )}
+
+                    {/* STEP 2: Payment */}
+                    {regStep === 2 && (
+                      <>
+                        <div className="glass rounded-2xl p-5 space-y-4 border border-violet-500/20">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                              <Coins className="w-5 h-5 text-amber-400" />
+                            </div>
+                            <div>
+                              <div className="font-display font-bold">
+                                Channel Deployment Fee
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Required to deploy your canister on ICP mainnet
+                              </div>
+                            </div>
+                          </div>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Deployment fee
+                              </span>
+                              <span className="font-bold text-amber-300">
+                                {Number(registrationFee) / 100_000_000} ICP
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Your deposited balance
+                              </span>
+                              <span
+                                className={
+                                  Number(myIcpDeposit) >=
+                                  Number(registrationFee)
+                                    ? "text-emerald-400 font-medium"
+                                    : "text-red-400 font-medium"
+                                }
+                              >
+                                {Number(myIcpDeposit) / 100_000_000} ICP
+                              </span>
+                            </div>
+                          </div>
+                          <div className="glass rounded-xl p-3 text-xs text-muted-foreground leading-relaxed border border-white/[0.06]">
+                            💡 This ICP is used to purchase cycles for your
+                            dedicated channel canister on the ICP mainnet. Your
+                            channel will have its own canister ID, wallet, and
+                            storage.
+                          </div>
+                          {Number(myIcpDeposit) < Number(registrationFee) && (
+                            <Button
+                              className="w-full rounded-xl bg-amber-600/80 hover:bg-amber-500/80 text-white gap-2"
+                              disabled={
+                                regLoading ||
+                                (!actor && !actorError) ||
+                                actorFetching
+                              }
+                              onClick={async () => {
+                                if (actorError && !actor) {
+                                  retryActor();
                                   return;
                                 }
-                              }
-                            } catch {
-                              // If method doesn't exist yet, proceed anyway
+                                if (!actor) return;
+                                setRegLoading(true);
+                                try {
+                                  await actor.depositIcp(registrationFee);
+                                  await refreshMyBalance();
+                                  toast.success(
+                                    "Payment confirmed! Balance updated.",
+                                  );
+                                } catch {
+                                  toast.error(
+                                    "Payment failed. Please try again.",
+                                  );
+                                } finally {
+                                  setRegLoading(false);
+                                }
+                              }}
+                              data-ocid="partners.form.submit"
+                            >
+                              {regLoading ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Coins className="w-4 h-4" />
+                              )}
+                              Confirm & Pay{" "}
+                              {Number(registrationFee) / 100_000_000} ICP
+                            </Button>
+                          )}
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                          <Button
+                            variant="ghost"
+                            className="flex-1 rounded-xl border-white/10"
+                            onClick={() => setRegStep(1)}
+                            data-ocid="partners.form.cancel.button"
+                          >
+                            ← Back
+                          </Button>
+                          <Button
+                            className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white"
+                            disabled={
+                              Number(myIcpDeposit) < Number(registrationFee) ||
+                              regLoading
                             }
-                            const record = await actor.registerPartner({
-                              name: newPartnerForm.name,
-                              description: newPartnerForm.description,
-                              website: newPartnerForm.website,
-                              chains: newPartnerForm.chains,
-                            });
-                            const canId = record.canisterId.toString();
-                            setRegSuccess({
-                              canisterId: canId,
-                              name: record.name,
-                            });
-                            setMyPartners((prev) => [...prev, record]);
-                            toast.success(
-                              `🎉 Channel "${record.name}" deployed!`,
-                            );
-                          } catch (err) {
-                            const msg =
-                              err instanceof Error ? err.message : String(err);
-                            toast.error(
-                              `Deployment failed: ${msg.slice(0, 120)}`,
-                            );
-                          } finally {
-                            setRegLoading(false);
-                          }
-                        }}
-                        data-ocid="partners.form.submit"
-                      >
-                        {regLoading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />{" "}
-                            Deploying canister...
-                          </>
-                        ) : actorError ? (
-                          <>
-                            <RefreshCw className="w-4 h-4" /> Retry Connection
-                          </>
-                        ) : !actor || actorFetching ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />{" "}
-                            Connecting...
-                          </>
-                        ) : (
-                          <>
-                            <Zap className="w-4 h-4" /> Deploy My Channel
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </>
+                            onClick={() => {
+                              setRegStep(3);
+                            }}
+                            data-ocid="partners.form.submit"
+                          >
+                            Deploy Channel →
+                          </Button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* STEP 3: Deploy */}
+                    {regStep === 3 && (
+                      <>
+                        {/* WASM check before deploy */}
+                        {wasmCheckForDeploy !== null &&
+                          !wasmCheckForDeploy.loaded && (
+                            <div className="glass-card rounded-2xl p-5 border border-amber-500/30 bg-amber-500/5 space-y-3">
+                              <div className="flex items-start gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">
+                                  <AlertTriangle className="w-5 h-5 text-amber-400" />
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-amber-300 mb-0.5">
+                                    Cannot Deploy — Channel WASM Not Loaded
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    The HYVEIL admin must upload the channel
+                                    template WASM before new channels can be
+                                    deployed. Please contact the platform admin.
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                className="w-full rounded-xl border-white/10 text-sm"
+                                onClick={() => setRegStep(2)}
+                                data-ocid="partners.form.cancel.button"
+                              >
+                                ← Go Back
+                              </Button>
+                            </div>
+                          )}
+                        <div className="glass rounded-2xl p-5 space-y-3 border border-violet-500/20">
+                          <div className="font-semibold text-sm">
+                            Ready to Deploy
+                          </div>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Channel name
+                              </span>
+                              <span className="font-medium">
+                                {newPartnerForm.name}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Website
+                              </span>
+                              <span className="font-medium truncate max-w-[160px]">
+                                {newPartnerForm.website}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Chains
+                              </span>
+                              <span className="font-medium">
+                                {newPartnerForm.chains.join(", ")}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">
+                                Fee paid
+                              </span>
+                              <span className="text-emerald-400 font-medium">
+                                ✓ {Number(registrationFee) / 100_000_000} ICP
+                              </span>
+                            </div>
+                          </div>
+                          <div className="pt-1 border-t border-white/[0.06]" />
+                          <div className="glass rounded-xl p-3 text-xs leading-relaxed border border-violet-500/20 space-y-1">
+                            <div className="flex items-center gap-1.5 font-semibold text-violet-300">
+                              <Lock className="w-3.5 h-3.5" /> HYVEIL Template
+                              Control
+                            </div>
+                            <p className="text-muted-foreground">
+                              Your channel URL will be auto-generated upon
+                              deployment. HYVEIL remains the canister controller
+                              and enforces the channel template — partners
+                              populate content within the fixed layout.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="glass rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-violet-300 border border-violet-500/20">
+                          <Zap className="w-3.5 h-3.5" /> Deploying will create
+                          a live canister on ICP mainnet
+                        </div>
+                        <div className="flex gap-3 pt-2">
+                          <Button
+                            variant="ghost"
+                            className="flex-1 rounded-xl border-white/10"
+                            onClick={() => setRegStep(2)}
+                            disabled={regLoading}
+                            data-ocid="partners.form.cancel.button"
+                          >
+                            ← Back
+                          </Button>
+                          <Button
+                            className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white gap-2"
+                            disabled={
+                              regLoading ||
+                              (!actor && !actorError) ||
+                              actorFetching ||
+                              (wasmCheckForDeploy !== null &&
+                                !wasmCheckForDeploy.loaded)
+                            }
+                            onClick={async () => {
+                              if (actorError && !actor) {
+                                retryActor();
+                                return;
+                              }
+                              setRegLoading(true);
+                              try {
+                                if (!actor) {
+                                  toast.error(
+                                    "Actor not ready. Please wait and try again.",
+                                  );
+                                  return;
+                                }
+                                // Check WASM is loaded before deploying
+                                try {
+                                  const ws = await (
+                                    actor as any
+                                  ).getChannelWasmStatus?.();
+                                  if (ws) {
+                                    setWasmCheckForDeploy(ws);
+                                    if (!ws.loaded) {
+                                      toast.error(
+                                        "Channel WASM not loaded. Contact the platform admin.",
+                                      );
+                                      setRegLoading(false);
+                                      return;
+                                    }
+                                  }
+                                } catch {
+                                  // If method doesn't exist yet, proceed anyway
+                                }
+                                const record = await actor.registerPartner({
+                                  name: newPartnerForm.name,
+                                  description: newPartnerForm.description,
+                                  website: newPartnerForm.website,
+                                  chains: newPartnerForm.chains,
+                                });
+                                const canId = record.canisterId.toString();
+                                setRegSuccess({
+                                  canisterId: canId,
+                                  name: record.name,
+                                  templateType: selectedTemplate,
+                                });
+                                setMyPartners((prev) => [...prev, record]);
+                                toast.success(
+                                  `🎉 Channel "${record.name}" deployed!`,
+                                );
+                              } catch (err) {
+                                const msg =
+                                  err instanceof Error
+                                    ? err.message
+                                    : String(err);
+                                toast.error(
+                                  `Deployment failed: ${msg.slice(0, 120)}`,
+                                );
+                              } finally {
+                                setRegLoading(false);
+                              }
+                            }}
+                            data-ocid="partners.form.submit"
+                          >
+                            {regLoading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />{" "}
+                                Deploying canister...
+                              </>
+                            ) : actorError ? (
+                              <>
+                                <RefreshCw className="w-4 h-4" /> Retry
+                                Connection
+                              </>
+                            ) : !actor || actorFetching ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />{" "}
+                                Connecting...
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="w-4 h-4" /> Deploy My Channel
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </DialogContent>
         </Dialog>
