@@ -430,13 +430,27 @@ export function AdminCreatorTemplate({ isAdmin }: Props) {
 
   const handleLike = async (videoId: string) => {
     if (!actor) return;
+    if (likedIds.has(videoId)) {
+      toast.error("Already liked — you can only like a video once.");
+      return;
+    }
     setLikedIds((prev) => new Set([...prev, videoId]));
     setVideos((prev) =>
       prev.map((v) => (v.id === videoId ? { ...v, likes: v.likes + 1n } : v)),
     );
     try {
       await actor.likeVideo(videoId);
-    } catch {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (
+        msg.toLowerCase().includes("already") ||
+        msg.toLowerCase().includes("duplicate") ||
+        msg.toLowerCase().includes("already liked")
+      ) {
+        // Already liked on chain — keep liked state, just show info
+        toast.info("Already liked this video.");
+        return;
+      }
       setLikedIds((prev) => {
         const n = new Set(prev);
         n.delete(videoId);
@@ -2103,7 +2117,7 @@ function ReelCard({
                 style={{ color: liked ? "#ec4899" : "white" }}
               />
             }
-            label={video.likes.toString()}
+            label={liked ? "Liked ✓" : video.likes.toString()}
             onClick={onLike}
             ocid={`creator_template.toggle.${index + 1}`}
           />

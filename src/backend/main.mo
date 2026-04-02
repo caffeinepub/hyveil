@@ -39,19 +39,18 @@ actor Main {
   var oracleWasm : ?Blob = ?OracleWasm.wasm;
 
   // --- Auto-refill tracking ---
-  // Refill thresholds and targets
-  let REFILL_THRESHOLD : Nat = 1_000_000_000;       // 1B cycles — trigger refill
-  let REFILL_TARGET : Nat = 1_000_000_000_000;      // 1 TC — top up to this level
-  let PARTNER_LOW_THRESHOLD : Nat = 200_000_000_000; // 200B cycles — partner warning
-  let PARTNER_TOPUP_CYCLES : Nat = 50_000_000_000;   // 50B cycles sent on partner top-up
-  let PARTNER_TOPUP_FEE : Nat = 100_000_000;         // 1 ICP in e8s
+  let REFILL_THRESHOLD : Nat = 1_000_000_000;
+  let REFILL_TARGET : Nat = 1_000_000_000_000;
+  let PARTNER_LOW_THRESHOLD : Nat = 200_000_000_000;
+  let PARTNER_TOPUP_CYCLES : Nat = 50_000_000_000;
+  let PARTNER_TOPUP_FEE : Nat = 100_000_000;
 
   var lastAutoRefillTime : Int = 0;
   var autoRefillCount : Nat = 0;
   var lastOracleCyclesChecked : Nat = 0;
   var lastTokenCyclesChecked : Nat = 0;
 
-  // --- IC Management Canister Interface (extended) ---
+  // --- IC Management Canister Interface ---
   let icManagement = actor ("aaaaa-aa") : actor {
     create_canister : shared ({
       settings : ?{
@@ -69,7 +68,7 @@ actor Main {
     }) -> async ();
   };
 
-  // --- Auto-Refill: Check and top up HYVEIL-owned canisters ---
+  // --- Auto-Refill ---
   func checkAndRefillOwnedCanisters() : async () {
     let ic = actor ("aaaaa-aa") : actor {
       canister_status : shared ({ canister_id : Principal }) -> async {
@@ -80,7 +79,6 @@ actor Main {
       };
       deposit_cycles : shared ({ canister_id : Principal }) -> async ();
     };
-    // Refill oracle canister if deployed and low
     switch (oraclePrincipal) {
       case (?oId) {
         try {
@@ -88,9 +86,7 @@ actor Main {
           lastOracleCyclesChecked := status.cycles;
           if (status.cycles < REFILL_THRESHOLD) {
             let topUpAmount = REFILL_TARGET - status.cycles;
-            await (
-              with cycles = topUpAmount
-            ) ic.deposit_cycles({ canister_id = oId });
+            await (with cycles = topUpAmount) ic.deposit_cycles({ canister_id = oId });
             autoRefillCount += 1;
             lastAutoRefillTime := Time.now();
           };
@@ -98,7 +94,6 @@ actor Main {
       };
       case (null) {};
     };
-    // Refill token canister if deployed and low
     switch (tokenCanisterId) {
       case (?tId) {
         try {
@@ -106,9 +101,7 @@ actor Main {
           lastTokenCyclesChecked := status.cycles;
           if (status.cycles < REFILL_THRESHOLD) {
             let topUpAmount = REFILL_TARGET - status.cycles;
-            await (
-              with cycles = topUpAmount
-            ) ic.deposit_cycles({ canister_id = tId });
+            await (with cycles = topUpAmount) ic.deposit_cycles({ canister_id = tId });
             autoRefillCount += 1;
             lastAutoRefillTime := Time.now();
           };
@@ -118,13 +111,11 @@ actor Main {
     };
   };
 
-  // Hourly timer for auto-refill (3600 seconds * 1_000_000_000 ns)
   ignore Timer.recurringTimer<system>(
     #seconds(3600),
     func() : async () { await checkAndRefillOwnedCanisters() }
   );
 
-  // --- Auto-Refill Status (Admin-only query) ---
   public shared ({ caller }) func getAutoRefillStatus() : async {
     lastRefillTime : Int;
     totalRefillCount : Nat;
@@ -146,7 +137,6 @@ actor Main {
     };
   };
 
-  // --- Manual trigger for auto-refill (Admin-only) ---
   public shared ({ caller }) func triggerAutoRefill() : async () {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized: Only admins can trigger auto-refill");
@@ -154,7 +144,6 @@ actor Main {
     await checkAndRefillOwnedCanisters();
   };
 
-  // --- Partner Canister Cycles (public for partner, private status) ---
   public shared ({ caller }) func getPartnerCanisterCycles(partnerId : Nat) : async Nat {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized");
@@ -177,12 +166,9 @@ actor Main {
     try {
       let status = await ic.canister_status({ canister_id = partner.canisterId });
       status.cycles;
-    } catch (_) {
-      0;
-    };
+    } catch (_) { 0 };
   };
 
-  // --- Partner Top-Up: Pay 1 ICP, get 50B cycles added to their canister ---
   public shared ({ caller }) func topUpPartnerCanister(partnerId : Nat) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can top up canisters");
@@ -194,7 +180,6 @@ actor Main {
     if (partner.owner != caller) {
       Runtime.trap("Unauthorized: Only the channel owner can top up their canister");
     };
-    // Deduct 1 ICP from partner's balance
     let currentBalance = switch (icpBalances.get(caller)) {
       case (null) { 0 };
       case (?balance) { balance };
@@ -203,13 +188,10 @@ actor Main {
       Runtime.trap("Insufficient ICP balance. Need 1 ICP (100,000,000 e8s). Deposit ICP first.");
     };
     icpBalances.add(caller, currentBalance - PARTNER_TOPUP_FEE);
-    // Transfer 50B cycles from HYVEIL reserve to partner canister
     let ic = actor ("aaaaa-aa") : actor {
       deposit_cycles : shared ({ canister_id : Principal }) -> async ();
     };
-    await (
-      with cycles = PARTNER_TOPUP_CYCLES
-    ) ic.deposit_cycles({ canister_id = partner.canisterId });
+    await (with cycles = PARTNER_TOPUP_CYCLES) ic.deposit_cycles({ canister_id = partner.canisterId });
   };
 
   public shared ({ caller }) func setChannelWasm(wasm : Blob) : async () {
@@ -244,7 +226,6 @@ actor Main {
     hyveilPrincipal;
   };
 
-  // --- Token System Management (Admin-only) ---
   public shared ({ caller }) func setOraclePrincipal(p : Principal) : async () {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized: Only admins can set oracle principal");
@@ -267,7 +248,6 @@ actor Main {
     tokenCanisterId;
   };
 
-  // --- Token System Status ---
   public query func getTokenSystemStatus() : async {
     tokenDeployed : Bool;
     oracleDeployed : Bool;
@@ -286,7 +266,6 @@ actor Main {
     };
   };
 
-  // --- One-Click Token System Deployment (Admin-only) ---
   public shared ({ caller }) func deployTokenSystem() : async {
     tokenCanisterId : Principal;
     oracleCanisterId : Principal;
@@ -297,7 +276,6 @@ actor Main {
     if (tokenCanisterId != null) {
       Runtime.trap("Token system already deployed");
     };
-
     let tWasm = switch (tokenWasm) {
       case (null) { Runtime.trap("Token WASM not loaded") };
       case (?w) { w };
@@ -306,8 +284,6 @@ actor Main {
       case (null) { Runtime.trap("Oracle WASM not loaded") };
       case (?w) { w };
     };
-
-    // Deploy token canister
     let { canister_id = newTokenId } = await (
       with cycles = 50_000_000_000
     ) icManagement.create_canister({
@@ -324,8 +300,6 @@ actor Main {
       wasm_module = tWasm;
       arg = Blob.fromArray([]);
     });
-
-    // Deploy oracle canister
     let { canister_id = newOracleId } = await (
       with cycles = 50_000_000_000
     ) icManagement.create_canister({
@@ -342,8 +316,6 @@ actor Main {
       wasm_module = oWasm;
       arg = Blob.fromArray([]);
     });
-
-    // Wire: set admin on token canister, then set oracle as the minter
     type TokenInitActor = actor {
       initAdmin : () -> async ();
       setOracle : (Principal) -> async ();
@@ -352,38 +324,29 @@ actor Main {
       initAdmin : () -> async ();
       setTokenCanister : (Principal) -> async ();
     };
-
     let tokenActor : TokenInitActor = actor (newTokenId.toText());
     await tokenActor.initAdmin();
     await tokenActor.setOracle(newOracleId);
-
     let oracleActor : OracleInitActor = actor (newOracleId.toText());
     await oracleActor.initAdmin();
     await oracleActor.setTokenCanister(newTokenId);
-
-    // Store canister IDs
     tokenCanisterId := ?newTokenId;
     oraclePrincipal := ?newOracleId;
-
     { tokenCanisterId = newTokenId; oracleCanisterId = newOracleId };
   };
 
-  // Channel actor interface for post-deploy initialization
   type ChannelActor = actor {
     initialize : (Principal, Principal, Text, Text) -> async ();
   };
 
-  // Oracle actor interface
   type OracleActor = actor {
     registerChannel : (Principal, Principal) -> async ();
   };
 
-  // Token actor interface
   type TokenActor = actor {
     balanceOf : (Principal) -> async Nat;
   };
 
-  // User Profile Type and Management
   public type UserProfile = {
     name : Text;
   };
@@ -411,7 +374,6 @@ actor Main {
     userProfiles.add(caller, profile);
   };
 
-  // Partner Registry
   public type PartnerStatus = {
     #pending;
     #approved;
@@ -437,6 +399,32 @@ actor Main {
     partnerId : Nat;
   };
 
+  // --- ICP Ledger interface (ICRC-2 + ICRC-1 transfer for withdrawals) ---
+  let icpLedger = actor("ryjl3-tyaaa-aaaaa-aaaba-cai") : actor {
+    icrc2_transfer_from : shared ({
+      spender_subaccount : ?Blob;
+      from : { owner : Principal; subaccount : ?Blob };
+      to : { owner : Principal; subaccount : ?Blob };
+      amount : Nat;
+      fee : ?Nat;
+      memo : ?Blob;
+      created_at_time : ?Nat64;
+    }) -> async {
+      #Ok : Nat;
+      #Err : {
+        #BadFee : { expected_fee : Nat };
+        #BadBurn : { min_burn_amount : Nat };
+        #InsufficientFunds : { balance : Nat };
+        #InsufficientAllowance : { allowance : Nat };
+        #TooOld;
+        #CreatedInFuture : { ledger_time : Nat64 };
+        #Duplicate : { duplicate_of : Nat };
+        #TemporarilyUnavailable;
+        #GenericError : { error_code : Nat; message : Text };
+      };
+    };
+  };
+
   var nextPartnerId = 1;
   let partners = Map.empty<Nat, PartnerRecord>();
   let icpBalances = Map.empty<Principal, Nat>();
@@ -445,11 +433,36 @@ actor Main {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can deposit ICP");
     };
-    let currentBalance = switch (icpBalances.get(caller)) {
-      case (null) { 0 };
-      case (?balance) { balance };
+    let result = await icpLedger.icrc2_transfer_from({
+      spender_subaccount = null;
+      from = { owner = caller; subaccount = null };
+      to = { owner = Principal.fromActor(Main); subaccount = null };
+      amount = amount;
+      fee = ?10_000;
+      memo = null;
+      created_at_time = null;
+    });
+    switch (result) {
+      case (#Ok(_)) {
+        let currentBalance = switch (icpBalances.get(caller)) {
+          case (null) { 0 };
+          case (?balance) { balance };
+        };
+        icpBalances.add(caller, currentBalance + amount);
+      };
+      case (#Err(#InsufficientFunds({ balance }))) {
+        Runtime.trap("Insufficient ICP balance on ledger. Available: " # balance.toText() # " e8s");
+      };
+      case (#Err(#InsufficientAllowance({ allowance }))) {
+        Runtime.trap("Insufficient allowance. Please approve HYVEIL to spend your ICP first. Current allowance: " # allowance.toText() # " e8s");
+      };
+      case (#Err(#BadFee({ expected_fee }))) {
+        Runtime.trap("Bad fee. Expected: " # expected_fee.toText() # " e8s");
+      };
+      case (#Err(_)) {
+        Runtime.trap("ICP transfer from ledger failed. Check your ICP balance and allowance.");
+      };
     };
-    icpBalances.add(caller, currentBalance + amount);
   };
 
   public query func getRegistrationFee() : async Nat {
@@ -466,6 +479,70 @@ actor Main {
     };
   };
 
+  // --- Creator Earnings Withdrawal ---
+  // Creators accumulate 90% of content purchase revenue in icpBalances.
+  // This function transfers their earnings out to their own wallet on the ICP ledger.
+  public shared ({ caller }) func withdrawEarnings(amount : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can withdraw earnings");
+    };
+    if (amount == 0) { Runtime.trap("Amount must be greater than 0") };
+    let fee : Nat = 10_000; // ICP transfer fee
+    let balance = switch (icpBalances.get(caller)) {
+      case (null) { 0 };
+      case (?b) { b };
+    };
+    if (balance < amount + fee) {
+      Runtime.trap("Insufficient earnings balance. Available: " # balance.toText() # " e8s, requested: " # amount.toText() # " e8s + " # fee.toText() # " e8s fee");
+    };
+    // Deduct first to prevent double-spend
+    icpBalances.add(caller, balance - amount - fee);
+    // Transfer ICP to caller's wallet via a separate actor reference
+    // (icpLedger is kept to its original type for upgrade compatibility)
+    let icpLedgerTransfer = actor("ryjl3-tyaaa-aaaaa-aaaba-cai") : actor {
+      icrc1_transfer : shared ({
+        from_subaccount : ?Blob;
+        to : { owner : Principal; subaccount : ?Blob };
+        amount : Nat;
+        fee : ?Nat;
+        memo : ?Blob;
+        created_at_time : ?Nat64;
+      }) -> async {
+        #Ok : Nat;
+        #Err : {
+          #BadFee : { expected_fee : Nat };
+          #BadBurn : { min_burn_amount : Nat };
+          #InsufficientFunds : { balance : Nat };
+          #TooOld;
+          #CreatedInFuture : { ledger_time : Nat64 };
+          #Duplicate : { duplicate_of : Nat };
+          #TemporarilyUnavailable;
+          #GenericError : { error_code : Nat; message : Text };
+        };
+      };
+    };
+    let result = await icpLedgerTransfer.icrc1_transfer({
+      from_subaccount = null;
+      to = { owner = caller; subaccount = null };
+      amount = amount;
+      fee = ?fee;
+      memo = null;
+      created_at_time = null;
+    });
+    switch (result) {
+      case (#Ok(_)) {};
+      case (#Err(_)) {
+        // Restore balance on failure
+        let currentBal = switch (icpBalances.get(caller)) {
+          case (null) { 0 };
+          case (?b) { b };
+        };
+        icpBalances.add(caller, currentBal + amount + fee);
+        Runtime.trap("ICP withdrawal transfer failed. Earnings have been restored.");
+      };
+    };
+  };
+
   public type RegisterPartnerInput = {
     name : Text;
     description : Text;
@@ -477,14 +554,10 @@ actor Main {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can register partners. Create a user profile first.");
     };
-
     let wasm = switch (channelWasm) {
-      case (null) {
-        Runtime.trap("Channel WASM not loaded. Admin must call setChannelWasm first.");
-      };
+      case (null) { Runtime.trap("Channel WASM not loaded. Admin must call setChannelWasm first.") };
       case (?w) { w };
     };
-
     let registrationFee = 100_000_000;
     let currentBalance = switch (icpBalances.get(caller)) {
       case (null) { 0 };
@@ -493,39 +566,32 @@ actor Main {
     if (currentBalance < registrationFee) {
       Runtime.trap("Insufficient ICP balance for registration. You have " # currentBalance.toText() # " e8s, need " # registrationFee.toText() # " e8s. Deposit ICP first.");
     };
-
     let newBalance = currentBalance - registrationFee : Nat;
     icpBalances.add(caller, newBalance);
-
     let treasury = switch (hyveilPrincipal) {
       case (?p) { p };
       case (null) { Principal.fromActor(Main) };
     };
-
     let { canister_id = newCanisterId } = await (
       with cycles = 50_000_000_000
     ) icManagement.create_canister({
       settings = ?{
-        controllers = ?[Principal.fromActor(Main), caller];
+        controllers = ?[Principal.fromActor(Main)];
         compute_allocation = null;
         memory_allocation = null;
         freezing_threshold = null;
       };
     });
-
     await icManagement.install_code({
       mode = #install;
       canister_id = newCanisterId;
       wasm_module = wasm;
       arg = Blob.fromArray([]);
     });
-
     let channelActor : ChannelActor = actor (newCanisterId.toText());
     await channelActor.initialize(caller, treasury, input.name, input.description);
-
     let partnerId = nextPartnerId;
     nextPartnerId += 1;
-
     let newPartner : PartnerRecord = {
       id = partnerId;
       owner = caller;
@@ -540,7 +606,6 @@ actor Main {
       totalRevenue = 0;
     };
     partners.add(partnerId, newPartner);
-
     switch (oraclePrincipal) {
       case (?oraclePrincipalId) {
         try {
@@ -550,7 +615,6 @@ actor Main {
       };
       case (null) {};
     };
-
     newPartner;
   };
 
@@ -567,10 +631,15 @@ actor Main {
     };
   };
 
-  public query ({ caller }) func getHyvBalance(principal : Principal) : async Nat {
+  public shared func getHyvBalance(principal : Principal) : async Nat {
     switch (tokenCanisterId) {
       case (null) { 0 };
-      case (?_tokenId) { 0 };
+      case (?tId) {
+        try {
+          let tokenActor2 : TokenActor = actor (tId.toText());
+          await tokenActor2.balanceOf(principal);
+        } catch (_) { 0 };
+      };
     };
   };
 
@@ -681,6 +750,10 @@ actor Main {
   var nextPurchaseId = 1;
   let purchases = Map.empty<Nat, PurchaseRecord>();
 
+  // SECURITY FIX: purchaseContent now pulls real ICP from the buyer via icrc2_transfer_from
+  // before recording the purchase. This closes the free-purchase exploit where anyone could
+  // call this function without paying and inflate creator revenue + social mining scores.
+  // Also prevents duplicate purchases of the same content item.
   public shared ({ caller }) func purchaseContent(contentId : Text) : async PurchaseRecord {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can purchase content");
@@ -688,6 +761,38 @@ actor Main {
     let content = switch (contentItems.get(contentId)) {
       case (null) { Runtime.trap("Content not found") };
       case (?c) { c };
+    };
+    if (content.priceE8s == 0) {
+      Runtime.trap("This content is free — no purchase required");
+    };
+    // Prevent duplicate purchases
+    let alreadyBought = purchases.values().filter(
+      func(p : PurchaseRecord) : Bool { p.buyer == caller and p.contentId == contentId }
+    ).toArray().size() > 0;
+    if (alreadyBought) {
+      Runtime.trap("You have already purchased this content");
+    };
+    // Pull real ICP from buyer. Buyer must have called icrc2_approve on the ICP ledger first.
+    let payResult = await icpLedger.icrc2_transfer_from({
+      spender_subaccount = null;
+      from = { owner = caller; subaccount = null };
+      to = { owner = Principal.fromActor(Main); subaccount = null };
+      amount = content.priceE8s;
+      fee = ?10_000;
+      memo = null;
+      created_at_time = null;
+    });
+    switch (payResult) {
+      case (#Err(#InsufficientFunds({ balance }))) {
+        Runtime.trap("Insufficient ICP balance. Available: " # balance.toText() # " e8s, required: " # content.priceE8s.toText() # " e8s");
+      };
+      case (#Err(#InsufficientAllowance({ allowance }))) {
+        Runtime.trap("Payment not pre-approved. Approve HYVEIL to spend " # content.priceE8s.toText() # " e8s on the ICP ledger first.");
+      };
+      case (#Err(_)) {
+        Runtime.trap("ICP payment failed. Check your balance and approval on the ICP ledger.");
+      };
+      case (#Ok(_)) {}; // Payment confirmed on-chain, proceed
     };
     let totalAmount = content.priceE8s;
     let creatorShare = (totalAmount * 90) / 100;
@@ -706,7 +811,20 @@ actor Main {
       case (?p) { p };
     };
     partners.add(content.partnerId, { partner with totalRevenue = partner.totalRevenue + totalAmount });
+    // Credit creator's 90% share to their withdrawable earnings balance
+    let creatorBalance = switch (icpBalances.get(partner.owner)) {
+      case (null) { 0 };
+      case (?b) { b };
+    };
+    icpBalances.add(partner.owner, creatorBalance + creatorShare);
     purchase;
+  };
+
+  // Check if caller has already purchased a specific content item
+  public query ({ caller }) func hasPurchased(contentId : Text) : async Bool {
+    purchases.values().filter(
+      func(p : PurchaseRecord) : Bool { p.buyer == caller and p.contentId == contentId }
+    ).toArray().size() > 0;
   };
 
   public type RevenueStats = {
@@ -871,6 +989,9 @@ actor Main {
   };
 
   let videos = Map.empty<Text, VideoMeta>();
+  // SECURITY FIX: Track which principals have liked which videos to prevent
+  // the same user from liking the same video multiple times (bot inflation).
+  let videoLikes = Map.empty<Text, Map.Map<Principal, Bool>>();
 
   public shared ({ caller }) func saveVideoMeta(meta : VideoMeta) : async () {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
@@ -898,6 +1019,27 @@ actor Main {
     switch (videos.get(id)) {
       case (null) { Runtime.trap("Video not found") };
       case (?video) {
+        // Check if already liked by this principal
+        let alreadyLiked = switch (videoLikes.get(id)) {
+          case (null) { false };
+          case (?likersMap) {
+            switch (likersMap.get(caller)) {
+              case (null) { false };
+              case (?_) { true };
+            };
+          };
+        };
+        if (alreadyLiked) { Runtime.trap("You have already liked this video") };
+        // Record the like
+        let likersMap = switch (videoLikes.get(id)) {
+          case (null) {
+            let m = Map.empty<Principal, Bool>();
+            videoLikes.add(id, m);
+            m;
+          };
+          case (?m) { m };
+        };
+        likersMap.add(caller, true);
         videos.add(id, { video with likes = video.likes + 1 });
       };
     };
@@ -920,8 +1062,7 @@ actor Main {
     Cycles.balance();
   };
 
-  // --- CMC (Cycles Minting Canister) Integration ---
-  // CMC canister ID on mainnet: rkp4c-7iaaa-aaaaa-aaaca-cai
+  // --- CMC Integration ---
   let cmc = actor("rkp4c-7iaaa-aaaaa-aaaca-cai") : actor {
     notify_top_up : shared ({
       canister_id : Principal;
@@ -942,13 +1083,9 @@ actor Main {
     };
   };
 
-  // Cached conversion rate
   var cachedXdrPermyriadPerIcp : Nat64 = 0;
   var cachedRateTimestamp : Nat64 = 0;
 
-  /// Admin-only. After sending ICP to the CMC sub-account for HYVEIL's canister,
-  /// call this with the ICP ledger block index to notify CMC and receive cycles.
-  /// Returns the number of cycles credited to HYVEIL's canister.
   public shared ({ caller }) func notifyTopUp(blockIndex : Nat64) : async Nat {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized: Only admins can call notifyTopUp");
@@ -977,8 +1114,6 @@ actor Main {
     };
   };
 
-  /// Fetch and cache the current ICP to cycles conversion rate from the CMC.
-  /// Returns xdr_permyriad_per_icp (divide by 10000 to get XDR per ICP).
   public shared func getIcpXdrConversionRate() : async {
     xdrPermyriadPerIcp : Nat64;
     timestampSeconds : Nat64;
@@ -986,13 +1121,9 @@ actor Main {
     let rateResult = await cmc.get_icp_xdr_conversion_rate();
     cachedXdrPermyriadPerIcp := rateResult.data.xdr_permyriad_per_icp;
     cachedRateTimestamp := rateResult.data.timestamp_seconds;
-    {
-      xdrPermyriadPerIcp = cachedXdrPermyriadPerIcp;
-      timestampSeconds = cachedRateTimestamp;
-    };
+    { xdrPermyriadPerIcp = cachedXdrPermyriadPerIcp; timestampSeconds = cachedRateTimestamp };
   };
 
-  /// Returns the last cached ICP/XDR rate without an async call.
   public query func getCachedIcpXdrRate() : async {
     xdrPermyriadPerIcp : Nat64;
     timestampSeconds : Nat64;

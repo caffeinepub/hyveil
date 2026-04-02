@@ -20,6 +20,9 @@ import { Toaster } from "@/components/ui/sonner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Actor, HttpAgent } from "@dfinity/agent";
+import type { Identity } from "@dfinity/agent";
+import { IDL } from "@dfinity/candid";
 import {
   Activity,
   AlertTriangle,
@@ -70,11 +73,68 @@ import type {
   PartnerStatus,
   PlatformRevenue,
 } from "./backend.d";
+import { loadConfig } from "./config";
 import { useActor } from "./hooks/useActor";
 import { useCkTokenBalances } from "./hooks/useCkTokenBalances";
 import { useIcpBalance } from "./hooks/useIcpBalance";
 import { useInternetIdentity } from "./hooks/useInternetIdentity";
 import { AdminCreatorTemplate } from "./pages/AdminCreatorTemplate";
+
+async function approveIcpLedger(
+  identity: Identity,
+  spenderCanisterId: string,
+  amount: bigint,
+): Promise<void> {
+  const agent = await HttpAgent.create({
+    host: "https://icp-api.io",
+    identity,
+  });
+
+  const ledger = Actor.createActor(
+    ({ IDL: idl }) =>
+      idl.Service({
+        icrc2_approve: idl.Func(
+          [
+            idl.Record({
+              spender: idl.Record({
+                owner: idl.Principal,
+                subaccount: idl.Opt(idl.Vec(idl.Nat8)),
+              }),
+              amount: idl.Nat,
+              fee: idl.Opt(idl.Nat),
+              memo: idl.Opt(idl.Vec(idl.Nat8)),
+              from_subaccount: idl.Opt(idl.Vec(idl.Nat8)),
+              created_at_time: idl.Opt(idl.Nat64),
+              expected_allowance: idl.Opt(idl.Nat),
+              expires_at: idl.Opt(idl.Nat64),
+            }),
+          ],
+          [idl.Variant({ Ok: idl.Nat, Err: idl.Text })],
+          [],
+        ),
+      }),
+    { agent, canisterId: "ryjl3-tyaaa-aaaaa-aaaba-cai" },
+  );
+
+  const { Principal } = await import("@dfinity/principal");
+  const result = (await (ledger as any).icrc2_approve({
+    spender: {
+      owner: Principal.fromText(spenderCanisterId),
+      subaccount: [],
+    },
+    amount,
+    fee: [],
+    memo: [],
+    from_subaccount: [],
+    created_at_time: [],
+    expected_allowance: [],
+    expires_at: [],
+  })) as { Ok?: bigint; Err?: string };
+
+  if (result.Err !== undefined) {
+    throw new Error(`Approve failed — check your ICP balance: ${result.Err}`);
+  }
+}
 
 type Tab =
   | "dashboard"
@@ -411,6 +471,18 @@ export default function App() {
     useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [commissionRate, setCommissionRate] = useState(20);
   const [ppvWatched, setPpvWatched] = useState<Set<string>>(new Set());
+  const [ppvPurchasing, setPpvPurchasing] = useState(false);
+  const [ppvPurchaseStep, setPpvPurchaseStep] = useState<
+    "idle" | "approving" | "purchasing"
+  >("idle");
+  // Withdraw earnings state
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawLoading, setWithdrawLoading] = useState(false);
+  // Follow state per channel
+  const [followedChannels, setFollowedChannels] = useState<Set<string>>(
+    new Set(),
+  );
+  const [followLoading, setFollowLoading] = useState<string | null>(null);
   const [ppvModal, setPpvModal] = useState<{
     id: string;
     title: string;
@@ -3996,6 +4068,114 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Withdraw Earnings */}
+                <div
+                  className="glass-card rounded-2xl p-5 border border-emerald-500/10"
+                  data-ocid="creator.withdraw.card"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div
+                      className="w-9 h-9 rounded-xl flex items-center justify-center"
+                      style={{ background: "rgba(16,185,129,0.15)" }}
+                    >
+                      <Wallet
+                        className="w-4 h-4"
+                        style={{ color: "#10b981" }}
+                      />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground text-sm">
+                        Withdraw Earnings
+                      </h3>
+                      <p className="text-xs text-muted-foreground">
+                        Withdrawable balance:{" "}
+                        <span className="text-emerald-400 font-semibold">
+                          {e8sToIcp(myIcpDeposit)} ICP
+                        </span>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={refreshMyBalance}
+                      className="ml-auto text-muted-foreground hover:text-foreground transition-colors"
+                      title="Refresh balance"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.0001"
+                        placeholder="Amount in ICP (e.g. 0.5)"
+                        value={withdrawAmount}
+                        onChange={(e) => setWithdrawAmount(e.target.value)}
+                        className="bg-white/5 border-white/10 text-white placeholder:text-white/30 text-sm"
+                        data-ocid="creator.withdraw.input"
+                      />
+                    </div>
+                    <Button
+                      className="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/20 whitespace-nowrap"
+                      disabled={
+                        withdrawLoading ||
+                        !withdrawAmount ||
+                        Number(withdrawAmount) <= 0
+                      }
+                      onClick={async () => {
+                        if (!actor || !withdrawAmount) return;
+                        const amountE8s = BigInt(
+                          Math.round(Number(withdrawAmount) * 100_000_000),
+                        );
+                        if (amountE8s <= 0n || amountE8s > myIcpDeposit) {
+                          toast.error(
+                            "Invalid amount or exceeds withdrawable balance.",
+                          );
+                          return;
+                        }
+                        setWithdrawLoading(true);
+                        try {
+                          await (actor as any).withdrawEarnings(amountE8s);
+                          toast.success(
+                            `${withdrawAmount} ICP withdrawn to your wallet!`,
+                          );
+                          setWithdrawAmount("");
+                          await refreshMyBalance();
+                        } catch (e: unknown) {
+                          const msg =
+                            e instanceof Error ? e.message : String(e);
+                          toast.error(`Withdrawal failed: ${msg}`);
+                        } finally {
+                          setWithdrawLoading(false);
+                        }
+                      }}
+                      data-ocid="creator.withdraw.submit_button"
+                    >
+                      {withdrawLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />{" "}
+                          Withdrawing…
+                        </>
+                      ) : (
+                        <>
+                          <ArrowUpRight className="w-4 h-4 mr-2" /> Withdraw to
+                          Wallet
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {myIcpDeposit === 0n && (
+                    <p
+                      className="text-xs text-muted-foreground mt-2"
+                      data-ocid="creator.withdraw.empty_state"
+                    >
+                      No earnings to withdraw yet. Revenue from content sales
+                      will appear here.
+                    </p>
+                  )}
+                </div>
+
                 {/* Channel list table */}
                 <div
                   className="glass-card rounded-2xl overflow-hidden"
@@ -5611,18 +5791,26 @@ export default function App() {
                                   retryActor();
                                   return;
                                 }
-                                if (!actor) return;
+                                if (!actor || !identity) return;
                                 setRegLoading(true);
                                 try {
+                                  const config = await loadConfig();
+                                  await approveIcpLedger(
+                                    identity,
+                                    config.backend_canister_id,
+                                    registrationFee + 10_000n,
+                                  );
                                   await actor.depositIcp(registrationFee);
                                   await refreshMyBalance();
                                   toast.success(
                                     "Payment confirmed! Balance updated.",
                                   );
-                                } catch {
-                                  toast.error(
-                                    "Payment failed. Please try again.",
-                                  );
+                                } catch (e: unknown) {
+                                  const msg =
+                                    e instanceof Error
+                                      ? e.message
+                                      : "Payment failed. Please try again.";
+                                  toast.error(msg);
                                 } finally {
                                   setRegLoading(false);
                                 }
@@ -5907,14 +6095,75 @@ export default function App() {
                   </button>
                 </div>
               </div>
-              <button
-                type="button"
-                className="ml-4 p-2 rounded-lg border border-white/10 hover:border-white/20 text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setSelectedPartnerChannel(null)}
-                data-ocid="partners.close_button"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-2 ml-4">
+                {isLoggedIn &&
+                  (() => {
+                    const cid = selectedPartnerChannel.canisterId;
+                    const isFollowed = followedChannels.has(cid);
+                    return (
+                      <Button
+                        size="sm"
+                        variant={isFollowed ? "outline" : "default"}
+                        className={`text-xs h-8 rounded-xl ${isFollowed ? "glass border-white/10 text-muted-foreground" : "bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/30"}`}
+                        disabled={followLoading === cid}
+                        onClick={async () => {
+                          if (!actor) return;
+                          setFollowLoading(cid);
+                          try {
+                            if (isFollowed) {
+                              await (actor as any).unfollow?.(cid);
+                              setFollowedChannels((prev) => {
+                                const s = new Set(prev);
+                                s.delete(cid);
+                                return s;
+                              });
+                              toast.success("Unfollowed channel");
+                            } else {
+                              await (actor as any).follow?.(cid);
+                              setFollowedChannels(
+                                (prev) => new Set([...prev, cid]),
+                              );
+                              toast.success("Following channel!");
+                            }
+                          } catch (e: unknown) {
+                            const msg =
+                              e instanceof Error ? e.message : String(e);
+                            if (
+                              msg.toLowerCase().includes("hour") ||
+                              msg.toLowerCase().includes("rate") ||
+                              msg.toLowerCase().includes("too many")
+                            ) {
+                              toast.error(
+                                "You can follow or unfollow once per hour.",
+                              );
+                            } else {
+                              toast.error(`Failed: ${msg}`);
+                            }
+                          } finally {
+                            setFollowLoading(null);
+                          }
+                        }}
+                        data-ocid="partners.toggle"
+                      >
+                        {followLoading === cid ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : isFollowed ? (
+                          "Following"
+                        ) : (
+                          "Follow"
+                        )}
+                      </Button>
+                    );
+                  })()}
+                <button
+                  type="button"
+                  className="p-2 rounded-lg border border-white/10 hover:border-white/20 text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setSelectedPartnerChannel(null)}
+                  data-ocid="partners.close_button"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Panel Body */}
@@ -6220,12 +6469,31 @@ export default function App() {
               </Button>
               <Button
                 className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white"
-                onClick={() => {
-                  if (!isLoggedIn) {
+                disabled={ppvPurchasing}
+                onClick={async () => {
+                  if (!isLoggedIn || !identity) {
                     toast.error("Connect your wallet to purchase content");
                     return;
                   }
-                  if (ppvModal) {
+                  if (!ppvModal || !actor) return;
+                  setPpvPurchasing(true);
+                  try {
+                    const config = await loadConfig();
+                    const priceE8s = BigInt(
+                      Math.round(ppvModal.price * 100_000_000),
+                    );
+                    // Step 1: Approve ICRC-2 on ledger
+                    setPpvPurchaseStep("approving");
+                    toast.info("Step 1/2: Approving payment on ledger…");
+                    await approveIcpLedger(
+                      identity,
+                      config.backend_canister_id,
+                      priceE8s + 10_000n,
+                    );
+                    // Step 2: Call purchaseContent
+                    setPpvPurchaseStep("purchasing");
+                    toast.info("Step 2/2: Completing purchase…");
+                    await (actor as any).purchaseContent(ppvModal.id);
                     setPpvWatched((prev) => new Set([...prev, ppvModal.id]));
                     const tx: Transaction = {
                       id: `ppv-${Date.now()}`,
@@ -6241,11 +6509,44 @@ export default function App() {
                       `Purchase complete! Enjoy: ${ppvModal.title}`,
                     );
                     setPpvModal(null);
+                  } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : String(e);
+                    if (
+                      msg.toLowerCase().includes("insufficient") ||
+                      msg.toLowerCase().includes("balance")
+                    ) {
+                      toast.error(
+                        "Insufficient ICP balance to complete this purchase.",
+                      );
+                    } else if (
+                      msg.toLowerCase().includes("approve") ||
+                      msg.toLowerCase().includes("allowance")
+                    ) {
+                      toast.error(
+                        "Payment approval failed. Please ensure your ICP balance is sufficient.",
+                      );
+                    } else {
+                      toast.error(`Purchase failed: ${msg}`);
+                    }
+                  } finally {
+                    setPpvPurchasing(false);
+                    setPpvPurchaseStep("idle");
                   }
                 }}
                 data-ocid="content.ppv.confirm_button"
               >
-                <Eye className="w-4 h-4 mr-2" /> Confirm & Watch
+                {ppvPurchasing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {ppvPurchaseStep === "approving"
+                      ? "Approving…"
+                      : "Purchasing…"}
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4 mr-2" /> Confirm & Watch
+                  </>
+                )}
               </Button>
             </div>
           </div>

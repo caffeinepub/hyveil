@@ -88,6 +88,9 @@ actor {
   };
 
   // --- Purchase & Revenue (90/10 split) ---
+  // SECURITY: Only hyveilTreasury (HYVEIL's main canister) may call recordPurchase.
+  // This prevents channel owners from fabricating fake transactions to inflate
+  // their revenue stats and social mining (HYV) score.
   public type PurchaseRecord = {
     id : Nat;
     buyer : Principal;
@@ -106,8 +109,10 @@ actor {
     contentId : Nat,
     amountE8s : Nat
   ) : async () {
-    if (caller != owner and caller != hyveilTreasury) {
-      Runtime.trap("Unauthorized: Only owner or HYVEIL treasury can record purchases");
+    // Only HYVEIL's main canister (hyveilTreasury) may record purchases.
+    // Removing owner access closes the fake-transaction exploit.
+    if (caller != hyveilTreasury) {
+      Runtime.trap("Unauthorized: Only HYVEIL can record purchases. Partners cannot self-report transactions.");
     };
     let hyveilShare = amountE8s / 10;
     let creatorShare = amountE8s - hyveilShare;
@@ -162,15 +167,41 @@ actor {
   };
 
   // --- Follower System ---
+  // SECURITY: Follow/unfollow rate-limited to 1 action per hour per principal.
+  // Prevents bot farms from artificially inflating follower counts which
+  // feed into the HYV social mining oracle score (2 pts per follower).
   let followers = Map.empty<Principal, Bool>();
+  let followTimestamps = Map.empty<Principal, Int>();
+  let FOLLOW_COOLDOWN : Int = 3_600_000_000_000; // 1 hour in nanoseconds
 
   public shared ({ caller }) func follow() : async () {
     if (Principal.isAnonymous(caller)) { Runtime.trap("Must be authenticated to follow") };
+    let now = Time.now();
+    switch (followTimestamps.get(caller)) {
+      case (?lastTime) {
+        if (now - lastTime < FOLLOW_COOLDOWN) {
+          Runtime.trap("Rate limited: You can only follow or unfollow once per hour per account");
+        };
+      };
+      case (null) {};
+    };
     followers.add(caller, true);
+    followTimestamps.add(caller, now);
   };
 
   public shared ({ caller }) func unfollow() : async () {
+    if (Principal.isAnonymous(caller)) { Runtime.trap("Must be authenticated to unfollow") };
+    let now = Time.now();
+    switch (followTimestamps.get(caller)) {
+      case (?lastTime) {
+        if (now - lastTime < FOLLOW_COOLDOWN) {
+          Runtime.trap("Rate limited: You can only follow or unfollow once per hour per account");
+        };
+      };
+      case (null) {};
+    };
     ignore followers.remove(caller);
+    followTimestamps.add(caller, now);
   };
 
   public query func getFollowerCount() : async Nat {
@@ -264,7 +295,6 @@ actor {
   } {
     var totalViews = 0;
     var sales = 0;
-    var subscriptions = 0;
     for (item in contentItems.values()) {
       totalViews += item.viewCount;
     };
@@ -276,7 +306,7 @@ actor {
       views = totalViews;
       followers = followers.size();
       sales;
-      subscriptions = 0; // subscription billing not yet implemented
+      subscriptions = 0;
     };
   };
 };

@@ -9,22 +9,18 @@ import Timer "mo:core/Timer";
 /// BTC-like halving: starts at 273_900_000_000 e8s/day (~2739 HYV)
 /// Halves every 1460 oracle cycles (4 years of daily cycles)
 actor Oracle {
-  let INITIAL_DAILY_MINT : Nat = 273_900_000_000; // 2739 HYV in e8s
-  let HALVING_INTERVAL : Nat = 1460; // oracle cycles between halvings
-  let HARD_CAP : Nat = 2_100_000_000_000_000; // 21M HYV in e8s
+  let INITIAL_DAILY_MINT : Nat = 273_900_000_000;
+  let HALVING_INTERVAL : Nat = 1460;
+  let HARD_CAP : Nat = 2_100_000_000_000_000;
 
   var admin : ?Principal = null;
   var tokenCanisterId : ?Principal = null;
   var totalOracleCycles : Nat = 0;
   var totalMintedByOracle : Nat = 0;
 
-  // Registry: channel canister ID -> owner principal
   let channelRegistry = Map.empty<Principal, Principal>();
-
-  // Per-creator HYV mined (for leaderboard)
   let creatorHyvMined = Map.empty<Principal, Nat>();
 
-  // Channel actor interface
   type ChannelActor = actor {
     getSocialMetrics : () -> async {
       uploads : Nat;
@@ -35,7 +31,6 @@ actor Oracle {
     };
   };
 
-  // Token actor interface
   type TokenActor = actor {
     mint : (Principal, Nat) -> async ();
   };
@@ -63,12 +58,17 @@ actor Oracle {
   };
 
   // --- Channel Registry ---
+  // SECURITY: Removed the `case (null) {}` bypass that allowed anyone to register
+  // channels before initAdmin() was called. Now always requires admin authorization.
   public shared ({ caller }) func registerChannel(channelId : Principal, ownerPrincipal : Principal) : async () {
-    // HYVEIL main canister or admin can register channels
     switch (admin) {
-      case (null) {}; // allow before admin is set (for init)
+      case (null) {
+        Runtime.trap("Oracle not initialized. Admin must call initAdmin first.");
+      };
       case (?a) {
-        if (caller != a) { Runtime.trap("Unauthorized: Only admin can register channels") };
+        if (caller != a) {
+          Runtime.trap("Unauthorized: Only admin (HYVEIL main canister) can register channels");
+        };
       };
     };
     channelRegistry.add(channelId, ownerPrincipal);
@@ -107,9 +107,8 @@ actor Oracle {
     (metrics.uploads * 10) + viewScore + (metrics.followers * 2) + (metrics.sales * 15) + (metrics.subscriptions * 20);
   };
 
-  // --- Oracle Cycle (run daily via timer or manual trigger) ---
+  // --- Oracle Cycle ---
   public shared ({ caller }) func runOracleCycle() : async Text {
-    // Admin or self (timer) can trigger
     switch (admin) {
       case (?a) {
         if (caller != a and caller != Principal.fromActor(Oracle)) {
@@ -128,17 +127,15 @@ actor Oracle {
     if (dailyMint == 0) { return "Daily mint is 0 (all HYV mined)" };
     if (totalMintedByOracle >= HARD_CAP) { return "Hard cap reached" };
 
-    // Gather metrics from all registered channels
     let channels = channelRegistry.entries().toArray();
     if (channels.size() == 0) {
       totalOracleCycles += 1;
       return "No channels registered";
     };
 
-    // Collect scores
     let tokenActor : TokenActor = actor (tokenId.toText());
     var totalScore : Nat = 0;
-    let scores = Map.empty<Principal, Nat>(); // owner -> score
+    let scores = Map.empty<Principal, Nat>();
 
     for ((channelId, ownerPrincipal) in channels.vals()) {
       try {
@@ -151,9 +148,7 @@ actor Oracle {
         };
         scores.add(ownerPrincipal, existing + score);
         totalScore += score;
-      } catch (e) {
-        // Skip unreachable channels
-      };
+      } catch (e) {};
     };
 
     if (totalScore == 0) {
@@ -161,7 +156,6 @@ actor Oracle {
       return "No social activity recorded";
     };
 
-    // Distribute proportional HYV
     let actualMint = Nat.min(dailyMint, HARD_CAP - totalMintedByOracle);
     var distributed : Nat = 0;
 
@@ -176,9 +170,7 @@ actor Oracle {
           };
           creatorHyvMined.add(ownerPrincipal, prev + share);
           distributed += share;
-        } catch (e) {
-          // Continue on mint failure
-        };
+        } catch (e) {};
       };
     };
 
