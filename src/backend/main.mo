@@ -13,6 +13,10 @@ import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
 import MixinStorage "blob-storage/Mixin";
 
+// Channel template WASM is auto-generated at build time by generate_channel_wasm.py
+// It is embedded here so no manual admin upload is needed after deployment.
+import ChannelWasm "ChannelWasm";
+
 // Data migration with-clause
 
 actor Main {
@@ -22,7 +26,8 @@ actor Main {
   include MixinStorage();
 
   // --- Channel WASM Storage ---
-  var channelWasm : ?Blob = null;
+  // Pre-loaded from the build-time embedded blob; can be updated by admin if needed.
+  var channelWasm : ?Blob = ?ChannelWasm.wasm;
   var hyveilPrincipal : ?Principal = null;
 
   public shared ({ caller }) func setChannelWasm(wasm : Blob) : async () {
@@ -201,7 +206,7 @@ actor Main {
       case (null) { Principal.fromActor(Main) };
     };
 
-    // Create the new channel canister on ICP mainnet (attach 100B cycles to fund it)
+    // Create the new channel canister on ICP mainnet (attach 50B cycles from HYVEIL reserve)
     let { canister_id = newCanisterId } = await (
       with cycles = 50_000_000_000
     ) icManagement.create_canister({

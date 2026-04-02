@@ -4,5 +4,10 @@ build:
   steps:
     - type: script
       commands:
+        # Step 1: Compile the channel template actor to WASM
+        - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --package base $MOTOKO_BASE --package core $MOTOKO_CORE channel.mo -o channel.wasm
+        # Step 2: Embed channel.wasm as a Motoko blob module (ChannelWasm.mo)
+        - python3 generate_channel_wasm.py
+        # Step 3: Compile main.mo (imports ChannelWasm.mo) into the backend WASM
         - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --actor-idl system-idl --package base $MOTOKO_BASE --package core $MOTOKO_CORE main.mo -o backend.wasm
         - mv backend.wasm "$ICP_WASM_OUTPUT_PATH"
