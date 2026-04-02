@@ -506,6 +506,20 @@ export default function App() {
     loaded: boolean;
   } | null>(null);
 
+  const [autoRefillStatus, setAutoRefillStatus] = useState<{
+    lastRefillTime: bigint;
+    totalRefillCount: bigint;
+    oracleCycles: bigint;
+    tokenCycles: bigint;
+    refillThreshold: bigint;
+    refillTarget: bigint;
+  } | null>(null);
+  const [autoRefillLoading, setAutoRefillLoading] = useState(false);
+  const [partnerCycles, setPartnerCycles] = useState<Record<string, bigint>>(
+    {},
+  );
+  const [topUpLoading, setTopUpLoading] = useState<Record<string, boolean>>({});
+
   const [dubLanguage, setDubLanguage] = useState("en");
   const [subtitles, setSubtitles] = useState(true);
   const [regionAnon, setRegionAnon] = useState(true);
@@ -556,6 +570,18 @@ export default function App() {
         setMyIcpDeposit(bal);
         setMyPartners(myP);
         setOnChainPartners(allP);
+        // Fetch cycles for each of the user's partner canisters
+        for (const p of myP) {
+          (actor as any)
+            .getPartnerCanisterCycles?.(p.id)
+            .then((cycles: bigint) => {
+              setPartnerCycles((prev) => ({
+                ...prev,
+                [p.id.toString()]: cycles,
+              }));
+            })
+            .catch(() => {});
+        }
         setIsAdmin(admin);
         if (admin) {
           // Fetch WASM status and HYVEIL principal for admin
@@ -611,6 +637,12 @@ export default function App() {
                 : null,
             });
           }
+        })
+        .catch(() => {});
+      (actor as any)
+        .getAutoRefillStatus?.()
+        .then((s: any) => {
+          if (s) setAutoRefillStatus(s);
         })
         .catch(() => {});
     }
@@ -1403,6 +1435,134 @@ export default function App() {
                     </p>
                   </div>
                 )}
+
+                {/* Auto-Refill Status (Admin Only) */}
+                {isAdmin &&
+                  (tokenSystemStatus?.tokenDeployed ||
+                    tokenSystemStatus?.oracleDeployed) && (
+                    <div>
+                      <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
+                        <RefreshCw className="w-4 h-4 text-emerald-400" />
+                        Auto-Refill Status
+                      </h3>
+                      <div className="glass-card rounded-2xl p-4">
+                        {autoRefillStatus === null ? (
+                          <div className="flex items-center gap-3">
+                            <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                            <span className="text-sm text-muted-foreground">
+                              Loading auto-refill status…
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="bg-white/5 rounded-xl p-3">
+                                <p className="text-xs text-muted-foreground mb-1">
+                                  Oracle Canister
+                                </p>
+                                <p
+                                  className={`text-lg font-bold ${autoRefillStatus.oracleCycles < 1_000_000_000n ? "text-amber-400" : "text-emerald-400"}`}
+                                >
+                                  {(
+                                    Number(autoRefillStatus.oracleCycles) /
+                                    1_000_000_000_000
+                                  ).toFixed(3)}{" "}
+                                  TC
+                                </p>
+                                {autoRefillStatus.oracleCycles <
+                                  1_000_000_000n && (
+                                  <p className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
+                                    <AlertTriangle className="w-3 h-3" /> Low —
+                                    will auto-refill
+                                  </p>
+                                )}
+                              </div>
+                              <div className="bg-white/5 rounded-xl p-3">
+                                <p className="text-xs text-muted-foreground mb-1">
+                                  Token Canister
+                                </p>
+                                <p
+                                  className={`text-lg font-bold ${autoRefillStatus.tokenCycles < 1_000_000_000n ? "text-amber-400" : "text-emerald-400"}`}
+                                >
+                                  {(
+                                    Number(autoRefillStatus.tokenCycles) /
+                                    1_000_000_000_000
+                                  ).toFixed(3)}{" "}
+                                  TC
+                                </p>
+                                {autoRefillStatus.tokenCycles <
+                                  1_000_000_000n && (
+                                  <p className="text-[10px] text-amber-400 flex items-center gap-1 mt-1">
+                                    <AlertTriangle className="w-3 h-3" /> Low —
+                                    will auto-refill
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-white/10 pt-3">
+                              <span>
+                                Total refills executed:{" "}
+                                <span className="text-white font-semibold">
+                                  {autoRefillStatus.totalRefillCount.toString()}
+                                </span>
+                              </span>
+                              <span>
+                                Last refill:{" "}
+                                <span className="text-white font-semibold">
+                                  {autoRefillStatus.lastRefillTime > 0n
+                                    ? new Date(
+                                        Number(
+                                          autoRefillStatus.lastRefillTime,
+                                        ) / 1_000_000,
+                                      ).toLocaleString()
+                                    : "Never"}
+                                </span>
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Threshold: 1B cycles → auto tops up to 1 TC
+                              (checked hourly)
+                            </div>
+                          </div>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mt-3 text-xs border border-emerald-400/20 hover:bg-emerald-400/10 w-full"
+                          disabled={autoRefillLoading}
+                          data-ocid="dashboard.autorefill.button"
+                          onClick={async () => {
+                            if (!actor) return;
+                            setAutoRefillLoading(true);
+                            try {
+                              await (actor as any).triggerAutoRefill?.();
+                              const s = await (
+                                actor as any
+                              ).getAutoRefillStatus?.();
+                              if (s) setAutoRefillStatus(s);
+                              toast.success("Auto-refill check triggered");
+                            } catch (e: any) {
+                              toast.error(
+                                e?.message || "Failed to trigger refill",
+                              );
+                            }
+                            setAutoRefillLoading(false);
+                          }}
+                        >
+                          {autoRefillLoading ? (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-3 h-3 mr-1" />
+                          )}
+                          Check Now
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        HYVEIL automatically tops up oracle and token canisters
+                        from its cycles reserve when they drop below 1B cycles.
+                      </p>
+                    </div>
+                  )}
 
                 {/* Channel WASM Status (Admin Only) */}
                 {isAdmin && (
@@ -4499,10 +4659,102 @@ export default function App() {
                             </p>
                           )}
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(
-                            Number(p.registeredAt) / 1_000_000,
-                          ).toLocaleDateString()}
+                        <div className="flex flex-col items-end gap-2">
+                          <div className="text-xs text-muted-foreground">
+                            {new Date(
+                              Number(p.registeredAt) / 1_000_000,
+                            ).toLocaleDateString()}
+                          </div>
+                          {/* Cycles balance and top-up */}
+                          {(() => {
+                            const cycles = partnerCycles[p.id.toString()];
+                            const isLow =
+                              cycles !== undefined &&
+                              cycles > 0n &&
+                              cycles < 200_000_000_000n;
+                            const isLoading =
+                              topUpLoading[p.id.toString()] || false;
+                            return (
+                              <div className="flex flex-col items-end gap-1.5">
+                                <span className="text-[10px] text-muted-foreground">
+                                  Cycles:{" "}
+                                  <span
+                                    className={
+                                      cycles === undefined || cycles === 0n
+                                        ? "text-muted-foreground"
+                                        : isLow
+                                          ? "text-amber-400 font-semibold"
+                                          : "text-cyan-400 font-semibold"
+                                    }
+                                  >
+                                    {cycles === undefined
+                                      ? "…"
+                                      : cycles === 0n
+                                        ? "Unknown"
+                                        : `${(Number(cycles) / 1_000_000_000).toFixed(1)} B`}
+                                  </span>
+                                </span>
+                                {isLow && (
+                                  <div className="flex flex-col items-end gap-1">
+                                    <span className="text-[10px] text-amber-400 flex items-center gap-1">
+                                      <AlertTriangle className="w-3 h-3" /> Low
+                                      cycles — channel may stop
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-[11px] h-7 px-2 border-amber-400/40 text-amber-300 hover:bg-amber-400/10"
+                                      disabled={isLoading}
+                                      data-ocid={`partners.topup.button.${i + 1}`}
+                                      onClick={async () => {
+                                        if (!actor) return;
+                                        setTopUpLoading((prev) => ({
+                                          ...prev,
+                                          [p.id.toString()]: true,
+                                        }));
+                                        try {
+                                          await (
+                                            actor as any
+                                          ).topUpPartnerCanister?.(p.id);
+                                          toast.success(
+                                            "Canister topped up with 50B cycles",
+                                          );
+                                          const newCycles = await (
+                                            actor as any
+                                          ).getPartnerCanisterCycles?.(p.id);
+                                          if (newCycles !== undefined) {
+                                            setPartnerCycles((prev) => ({
+                                              ...prev,
+                                              [p.id.toString()]: newCycles,
+                                            }));
+                                          }
+                                        } catch (e: any) {
+                                          const msg = e?.message || "";
+                                          if (
+                                            msg.includes("balance") ||
+                                            msg.includes("ICP")
+                                          ) {
+                                            toast.error("Deposit 1 ICP first");
+                                          } else {
+                                            toast.error(msg || "Top-up failed");
+                                          }
+                                        }
+                                        setTopUpLoading((prev) => ({
+                                          ...prev,
+                                          [p.id.toString()]: false,
+                                        }));
+                                      }}
+                                    >
+                                      {isLoading ? (
+                                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                                      ) : null}
+                                      Top Up 1 ICP
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     ))}

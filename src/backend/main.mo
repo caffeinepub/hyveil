@@ -8,6 +8,7 @@ import Time "mo:core/Time";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Blob "mo:core/Blob";
+import Timer "mo:core/Timer";
 
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
@@ -35,6 +36,180 @@ actor Main {
   var tokenCanisterId : ?Principal = null;
   var tokenWasm : ?Blob = ?TokenWasm.wasm;
   var oracleWasm : ?Blob = ?OracleWasm.wasm;
+
+  // --- Auto-refill tracking ---
+  // Refill thresholds and targets
+  let REFILL_THRESHOLD : Nat = 1_000_000_000;       // 1B cycles — trigger refill
+  let REFILL_TARGET : Nat = 1_000_000_000_000;      // 1 TC — top up to this level
+  let PARTNER_LOW_THRESHOLD : Nat = 200_000_000_000; // 200B cycles — partner warning
+  let PARTNER_TOPUP_CYCLES : Nat = 50_000_000_000;   // 50B cycles sent on partner top-up
+  let PARTNER_TOPUP_FEE : Nat = 100_000_000;         // 1 ICP in e8s
+
+  var lastAutoRefillTime : Int = 0;
+  var autoRefillCount : Nat = 0;
+  var lastOracleCyclesChecked : Nat = 0;
+  var lastTokenCyclesChecked : Nat = 0;
+
+  // --- IC Management Canister Interface (extended) ---
+  let icManagement = actor ("aaaaa-aa") : actor {
+    create_canister : shared ({
+      settings : ?{
+        controllers : ?[Principal];
+        compute_allocation : ?Nat;
+        memory_allocation : ?Nat;
+        freezing_threshold : ?Nat;
+      };
+    }) -> async { canister_id : Principal };
+    install_code : shared ({
+      mode : { #install; #upgrade; #reinstall };
+      canister_id : Principal;
+      wasm_module : Blob;
+      arg : Blob;
+    }) -> async ();
+  };
+
+  // --- Auto-Refill: Check and top up HYVEIL-owned canisters ---
+  func checkAndRefillOwnedCanisters() : async () {
+    let ic = actor ("aaaaa-aa") : actor {
+      canister_status : shared ({ canister_id : Principal }) -> async {
+        status : { #running; #stopping; #stopped };
+        cycles : Nat;
+        memory_size : Nat;
+        module_hash : ?Blob;
+      };
+      deposit_cycles : shared ({ canister_id : Principal }) -> async ();
+    };
+    // Refill oracle canister if deployed and low
+    switch (oraclePrincipal) {
+      case (?oId) {
+        try {
+          let status = await ic.canister_status({ canister_id = oId });
+          lastOracleCyclesChecked := status.cycles;
+          if (status.cycles < REFILL_THRESHOLD) {
+            let topUpAmount = REFILL_TARGET - status.cycles;
+            await (
+              with cycles = topUpAmount
+            ) ic.deposit_cycles({ canister_id = oId });
+            autoRefillCount += 1;
+            lastAutoRefillTime := Time.now();
+          };
+        } catch (_) {};
+      };
+      case (null) {};
+    };
+    // Refill token canister if deployed and low
+    switch (tokenCanisterId) {
+      case (?tId) {
+        try {
+          let status = await ic.canister_status({ canister_id = tId });
+          lastTokenCyclesChecked := status.cycles;
+          if (status.cycles < REFILL_THRESHOLD) {
+            let topUpAmount = REFILL_TARGET - status.cycles;
+            await (
+              with cycles = topUpAmount
+            ) ic.deposit_cycles({ canister_id = tId });
+            autoRefillCount += 1;
+            lastAutoRefillTime := Time.now();
+          };
+        } catch (_) {};
+      };
+      case (null) {};
+    };
+  };
+
+  // Hourly timer for auto-refill (3600 seconds * 1_000_000_000 ns)
+  ignore Timer.recurringTimer<system>(
+    #seconds(3600),
+    func() : async () { await checkAndRefillOwnedCanisters() }
+  );
+
+  // --- Auto-Refill Status (Admin-only query) ---
+  public shared ({ caller }) func getAutoRefillStatus() : async {
+    lastRefillTime : Int;
+    totalRefillCount : Nat;
+    oracleCycles : Nat;
+    tokenCycles : Nat;
+    refillThreshold : Nat;
+    refillTarget : Nat;
+  } {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can view auto-refill status");
+    };
+    {
+      lastRefillTime = lastAutoRefillTime;
+      totalRefillCount = autoRefillCount;
+      oracleCycles = lastOracleCyclesChecked;
+      tokenCycles = lastTokenCyclesChecked;
+      refillThreshold = REFILL_THRESHOLD;
+      refillTarget = REFILL_TARGET;
+    };
+  };
+
+  // --- Manual trigger for auto-refill (Admin-only) ---
+  public shared ({ caller }) func triggerAutoRefill() : async () {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can trigger auto-refill");
+    };
+    await checkAndRefillOwnedCanisters();
+  };
+
+  // --- Partner Canister Cycles (public for partner, private status) ---
+  public shared ({ caller }) func getPartnerCanisterCycles(partnerId : Nat) : async Nat {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized");
+    };
+    let partner = switch (partners.get(partnerId)) {
+      case (null) { Runtime.trap("Partner not found") };
+      case (?p) { p };
+    };
+    if (partner.owner != caller and not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only the channel owner or admin can check cycles");
+    };
+    let ic = actor ("aaaaa-aa") : actor {
+      canister_status : shared ({ canister_id : Principal }) -> async {
+        status : { #running; #stopping; #stopped };
+        cycles : Nat;
+        memory_size : Nat;
+        module_hash : ?Blob;
+      };
+    };
+    try {
+      let status = await ic.canister_status({ canister_id = partner.canisterId });
+      status.cycles;
+    } catch (_) {
+      0;
+    };
+  };
+
+  // --- Partner Top-Up: Pay 1 ICP, get 50B cycles added to their canister ---
+  public shared ({ caller }) func topUpPartnerCanister(partnerId : Nat) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only authenticated users can top up canisters");
+    };
+    let partner = switch (partners.get(partnerId)) {
+      case (null) { Runtime.trap("Partner not found") };
+      case (?p) { p };
+    };
+    if (partner.owner != caller) {
+      Runtime.trap("Unauthorized: Only the channel owner can top up their canister");
+    };
+    // Deduct 1 ICP from partner's balance
+    let currentBalance = switch (icpBalances.get(caller)) {
+      case (null) { 0 };
+      case (?balance) { balance };
+    };
+    if (currentBalance < PARTNER_TOPUP_FEE) {
+      Runtime.trap("Insufficient ICP balance. Need 1 ICP (100,000,000 e8s). Deposit ICP first.");
+    };
+    icpBalances.add(caller, currentBalance - PARTNER_TOPUP_FEE);
+    // Transfer 50B cycles from HYVEIL reserve to partner canister
+    let ic = actor ("aaaaa-aa") : actor {
+      deposit_cycles : shared ({ canister_id : Principal }) -> async ();
+    };
+    await (
+      with cycles = PARTNER_TOPUP_CYCLES
+    ) ic.deposit_cycles({ canister_id = partner.canisterId });
+  };
 
   public shared ({ caller }) func setChannelWasm(wasm : Blob) : async () {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
@@ -111,8 +286,6 @@ actor Main {
   };
 
   // --- One-Click Token System Deployment (Admin-only) ---
-  // Deploys token.mo and oracle.mo as real ICP canisters from HYVEIL's cycles reserve,
-  // wires them together, and stores their canister IDs. Can only be run once.
   public shared ({ caller }) func deployTokenSystem() : async {
     tokenCanisterId : Principal;
     oracleCanisterId : Principal;
@@ -192,24 +365,6 @@ actor Main {
     oraclePrincipal := ?newOracleId;
 
     { tokenCanisterId = newTokenId; oracleCanisterId = newOracleId };
-  };
-
-  // --- IC Management Canister Interface ---
-  let icManagement = actor ("aaaaa-aa") : actor {
-    create_canister : shared ({
-      settings : ?{
-        controllers : ?[Principal];
-        compute_allocation : ?Nat;
-        memory_allocation : ?Nat;
-        freezing_threshold : ?Nat;
-      };
-    }) -> async { canister_id : Principal };
-    install_code : shared ({
-      mode : { #install; #upgrade; #reinstall };
-      canister_id : Principal;
-      wasm_module : Blob;
-      arg : Blob;
-    }) -> async ();
   };
 
   // Channel actor interface for post-deploy initialization

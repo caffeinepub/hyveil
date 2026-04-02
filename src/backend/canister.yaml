@@ -4,15 +4,5 @@ build:
   steps:
     - type: script
       commands:
-        # Step 1: Compile channel template WASM and embed it
-        - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --actor-idl system-idl --package base $MOTOKO_BASE --package core $MOTOKO_CORE channel.mo -o channel.wasm
-        - python3 generate_channel_wasm.py
-        # Step 2: Compile token WASM and embed it
-        - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --actor-idl system-idl --package base $MOTOKO_BASE --package core $MOTOKO_CORE token.mo -o token.wasm
-        - python3 generate_token_wasm.py
-        # Step 3: Compile oracle WASM and embed it
-        - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --actor-idl system-idl --package base $MOTOKO_BASE --package core $MOTOKO_CORE oracle.mo -o oracle.wasm
-        - python3 generate_oracle_wasm.py
-        # Step 4: Compile main backend (imports all three WASM modules)
         - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --actor-idl system-idl --package base $MOTOKO_BASE --package core $MOTOKO_CORE main.mo -o backend.wasm
         - mv backend.wasm "$ICP_WASM_OUTPUT_PATH"
