@@ -37,6 +37,9 @@ actor Main {
   var tokenCanisterId : ?Principal = null;
   var tokenWasm : ?Blob = ?TokenWasm.wasm;
   var oracleWasm : ?Blob = ?OracleWasm.wasm;
+  // SECURITY FIX C-02: Mutex prevents concurrent admin calls from both passing the
+  // `tokenCanisterId != null` guard before either write completes, causing double deploy.
+  var tokenSystemDeploying : Bool = false;
 
   // --- Auto-refill tracking ---
   let REFILL_THRESHOLD : Nat = 1_000_000_000;
@@ -187,11 +190,19 @@ actor Main {
     if (currentBalance < PARTNER_TOPUP_FEE) {
       Runtime.trap("Insufficient ICP balance. Need 1 ICP (100,000,000 e8s). Deposit ICP first.");
     };
+    // C-04: Deduct ICP first; refund if the cycles deposit fails.
     icpBalances.add(caller, currentBalance - PARTNER_TOPUP_FEE);
     let ic = actor ("aaaaa-aa") : actor {
       deposit_cycles : shared ({ canister_id : Principal }) -> async ();
     };
-    await (with cycles = PARTNER_TOPUP_CYCLES) ic.deposit_cycles({ canister_id = partner.canisterId });
+    try {
+      await (with cycles = PARTNER_TOPUP_CYCLES) ic.deposit_cycles({ canister_id = partner.canisterId });
+    } catch (e) {
+      // Refund the fee since no cycles were actually deposited
+      let refundBal = switch (icpBalances.get(caller)) { case (null) { 0 }; case (?b) { b } };
+      icpBalances.add(caller, refundBal + PARTNER_TOPUP_FEE);
+      Runtime.trap("Cycles deposit failed. ICP has been refunded: " # e.message());
+    };
   };
 
   public shared ({ caller }) func setChannelWasm(wasm : Blob) : async () {
@@ -276,6 +287,12 @@ actor Main {
     if (tokenCanisterId != null) {
       Runtime.trap("Token system already deployed");
     };
+    // C-02: Mutex prevents a second concurrent call from passing the guard above
+    // before the first one writes tokenCanisterId.
+    if (tokenSystemDeploying) {
+      Runtime.trap("Token system deployment already in progress");
+    };
+    tokenSystemDeploying := true;
     let tWasm = switch (tokenWasm) {
       case (null) { Runtime.trap("Token WASM not loaded") };
       case (?w) { w };
@@ -332,6 +349,7 @@ actor Main {
     await oracleActor.setTokenCanister(newTokenId);
     tokenCanisterId := ?newTokenId;
     oraclePrincipal := ?newOracleId;
+    tokenSystemDeploying := false;
     { tokenCanisterId = newTokenId; oracleCanisterId = newOracleId };
   };
 
@@ -566,30 +584,50 @@ actor Main {
     if (currentBalance < registrationFee) {
       Runtime.trap("Insufficient ICP balance for registration. You have " # currentBalance.toText() # " e8s, need " # registrationFee.toText() # " e8s. Deposit ICP first.");
     };
+    // C-03: Deduct ICP before awaits. If deployment fails, we refund below.
     let newBalance = currentBalance - registrationFee : Nat;
     icpBalances.add(caller, newBalance);
     let treasury = switch (hyveilPrincipal) {
       case (?p) { p };
       case (null) { Principal.fromActor(Main) };
     };
-    let { canister_id = newCanisterId } = await (
-      with cycles = 50_000_000_000
-    ) icManagement.create_canister({
-      settings = ?{
-        controllers = ?[Principal.fromActor(Main)];
-        compute_allocation = null;
-        memory_allocation = null;
-        freezing_threshold = null;
-      };
-    });
-    await icManagement.install_code({
-      mode = #install;
-      canister_id = newCanisterId;
-      wasm_module = wasm;
-      arg = Blob.fromArray([]);
-    });
+    let newCanisterId = try {
+      let { canister_id } = await (
+        with cycles = 50_000_000_000
+      ) icManagement.create_canister({
+        settings = ?{
+          controllers = ?[Principal.fromActor(Main)];
+          compute_allocation = null;
+          memory_allocation = null;
+          freezing_threshold = null;
+        };
+      });
+      canister_id;
+    } catch (e) {
+      // Refund registration fee on create_canister failure
+      let refundBal = switch (icpBalances.get(caller)) { case (null) { 0 }; case (?b) { b } };
+      icpBalances.add(caller, refundBal + registrationFee);
+      Runtime.trap("Failed to create partner canister: " # e.message());
+    };
+    try {
+      await icManagement.install_code({
+        mode = #install;
+        canister_id = newCanisterId;
+        wasm_module = wasm;
+        arg = Blob.fromArray([]);
+      });
+    } catch (e) {
+      let refundBal = switch (icpBalances.get(caller)) { case (null) { 0 }; case (?b) { b } };
+      icpBalances.add(caller, refundBal + registrationFee);
+      Runtime.trap("Failed to install channel WASM: " # e.message());
+    };
     let channelActor : ChannelActor = actor (newCanisterId.toText());
-    await channelActor.initialize(caller, treasury, input.name, input.description);
+    try {
+      await channelActor.initialize(caller, treasury, input.name, input.description);
+    } catch (e) {
+      // Channel init failed but canister is already deployed — do not refund,
+      // admin can call initialize manually. Record partner anyway.
+    };
     let partnerId = nextPartnerId;
     nextPartnerId += 1;
     let newPartner : PartnerRecord = {
@@ -945,7 +983,69 @@ actor Main {
     );
   };
 
+  // SECURITY FIX H-03: URL allowlist prevents SSRF against internal ICP endpoints.
+  // Body size cap (32 KB) prevents cycle-drain via huge POST payloads (~49M cycles/outcall).
+  // Only authenticated users may call this function (unauthenticated users have no reason to).
+  let PROXY_ALLOWED_PREFIXES : [Text] = [
+    "https://httpbin.org/",
+    "https://youtube.com/",
+    "https://www.youtube.com/",
+    "https://reddit.com/",
+    "https://www.reddit.com/",
+    "https://twitter.com/",
+    "https://x.com/",
+    "https://api.twitter.com/",
+    "https://wikipedia.org/",
+    "https://en.wikipedia.org/",
+    "https://github.com/",
+    "https://api.github.com/",
+    "https://medium.com/",
+    "https://news.ycombinator.com/",
+    "https://arxiv.org/",
+    "https://netflix.com/",
+    "https://www.netflix.com/",
+    "https://icp-api.io/",
+  ];
+  let PROXY_MAX_BODY_BYTES : Nat = 32_768; // 32 KB
+
+  func isAllowedProxyUrl(url : Text) : Bool {
+    for (prefix in PROXY_ALLOWED_PREFIXES.vals()) {
+      if (url.size() >= prefix.size()) {
+        // Compare first prefix.size() characters
+        let urlSlice = url.chars();
+        let prefixSlice = prefix.chars();
+        var match = true;
+        var i = 0;
+        label check for (pc in prefixSlice) {
+          switch (urlSlice.next()) {
+            case (?uc) {
+              if (uc != pc) { match := false; break check };
+            };
+            case (null) { match := false; break check };
+          };
+          i += 1;
+        };
+        if (match) return true;
+      };
+    };
+    false;
+  };
+
   public shared ({ caller }) func proxyFetch(url : Text, method : Text, body : ?Text, extraHeaders : ?[(Text, Text)]) : async ProxyResponse {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      return { statusCode = 401; body = "Unauthorized: Must be logged in to use the proxy"; success = false };
+    };
+    if (not isAllowedProxyUrl(url)) {
+      return { statusCode = 403; body = "URL not allowed. Only permitted web2 sites are accessible via proxy."; success = false };
+    };
+    switch (body) {
+      case (?b) {
+        if (b.size() > PROXY_MAX_BODY_BYTES) {
+          return { statusCode = 413; body = "Request body too large. Maximum size is 32 KB."; success = false };
+        };
+      };
+      case (null) {};
+    };
     try {
       let headers : [OutCall.Header] = switch (extraHeaders) {
         case (null) { [] };

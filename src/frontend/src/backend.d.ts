@@ -168,7 +168,9 @@ export interface backendInterface {
     setMonetizationModel(partnerId: bigint, model: string): Promise<void>;
     setOraclePrincipal(p: Principal): Promise<void>;
     setTokenCanisterId(p: Principal): Promise<void>;
+    hasPurchased(contentId: string): Promise<boolean>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
+    withdrawEarnings(amount: bigint): Promise<void>;
     notifyTopUp(blockIndex: bigint): Promise<bigint>;
     getIcpXdrConversionRate(): Promise<IcpXdrRate>;
     getCachedIcpXdrRate(): Promise<IcpXdrRate>;

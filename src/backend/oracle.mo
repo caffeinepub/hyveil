@@ -18,6 +18,10 @@ actor Oracle {
   var totalOracleCycles : Nat = 0;
   var totalMintedByOracle : Nat = 0;
 
+  // SECURITY: Mutex flag prevents concurrent oracle cycles from racing to mint
+  // past the 21M hard cap (C-06 / C-07 TOCTOU fix).
+  var oracleCycleRunning : Bool = false;
+
   let channelRegistry = Map.empty<Principal, Principal>();
   let creatorHyvMined = Map.empty<Principal, Nat>();
 
@@ -108,16 +112,35 @@ actor Oracle {
   };
 
   // --- Oracle Cycle ---
+  // SECURITY FIX C-01: Always require admin auth — removed the `case (null) {}` bypass.
+  // SECURITY FIX C-06: Mutex guard (oracleCycleRunning) prevents two concurrent invocations
+  // from both passing the hard-cap check before either writes totalMintedByOracle, which
+  // would allow minting 2× the intended daily pool and exceeding the 21M cap.
   public shared ({ caller }) func runOracleCycle() : async Text {
+    // C-01: Always require admin — no bypass when admin is null
     switch (admin) {
+      case (null) {
+        Runtime.trap("Oracle not initialized. Call initAdmin first.");
+      };
       case (?a) {
         if (caller != a and caller != Principal.fromActor(Oracle)) {
           Runtime.trap("Unauthorized: Admin or timer only");
         };
       };
-      case (null) {};
     };
 
+    // C-06: Prevent concurrent oracle cycles from racing past hard cap
+    if (oracleCycleRunning) {
+      return "Oracle cycle already in progress. Try again later.";
+    };
+    oracleCycleRunning := true;
+
+    let result = await runOracleCycleInternal();
+    oracleCycleRunning := false;
+    result;
+  };
+
+  func runOracleCycleInternal() : async Text {
     let tokenId = switch (tokenCanisterId) {
       case (null) { return "Token canister not set" };
       case (?t) { t };
@@ -156,7 +179,11 @@ actor Oracle {
       return "No social activity recorded";
     };
 
-    let actualMint = Nat.min(dailyMint, HARD_CAP - totalMintedByOracle);
+    // C-06: Re-check hard cap after awaits (other interleaved calls may have advanced it)
+    let remainingCap = if (totalMintedByOracle >= HARD_CAP) { 0 } else { HARD_CAP - totalMintedByOracle };
+    let actualMint = Nat.min(dailyMint, remainingCap);
+    if (actualMint == 0) { return "Hard cap reached after awaits" };
+
     var distributed : Nat = 0;
 
     for ((ownerPrincipal, score) in scores.entries()) {
