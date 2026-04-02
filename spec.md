@@ -1,37 +1,41 @@
 # HYVEIL
 
 ## Current State
-- `main.mo` has canister factory, partner registry, admin dashboard, token system deployment
-- `oracle.mo` has social mining oracle with daily timer logic (not yet wired to auto-timer)
-- Admin dashboard shows HYVEIL cycles balance via `getHyveilCyclesBalance()`
-- No auto-refill logic for HYVEIL-owned canisters (oracle, token, main)
-- No partner canister cycles monitoring or top-up UX
+HYVEIL has a pre-funded cycles reserve model. HYVEIL's admin must manually top up the canister's cycles balance via dfx or the NNS. There is no in-app way to convert ICP held in HYVEIL's treasury into cycles. The CMC (Cycles Minting Canister) integration was listed as an unresolved issue.
+
+Currently working:
+- `getHyveilCyclesBalance()` returns the live cycles balance
+- Admin dashboard shows the cycles reserve card
+- Auto-refill logic draws from HYVEIL's cycles balance
 
 ## Requested Changes (Diff)
 
 ### Add
-- `main.mo`: Hourly timer that checks cycles of the oracle and token canisters, tops them up to 1 TC if they fall below 1B cycles
-- `main.mo`: `getCanisterCyclesBalance(canisterId)` — queries IC management `canister_status` to get any canister's cycles
-- `main.mo`: `getPartnerCanisterCycles(partnerId)` — returns cycles balance for a partner's canister
-- `main.mo`: `topUpPartnerCanister(partnerId)` — partner pays 1 ICP from their balance, HYVEIL transfers 50B cycles from reserve to their canister
-- Frontend: Per-channel cycles balance display in My Channels / Partner management section
-- Frontend: Warning banner on partner dashboard when their canister cycles < 200B
-- Frontend: "Top Up 1 ICP" button that calls `topUpPartnerCanister()`
-- Frontend: Admin dashboard shows auto-refill status (last checked, last refill events)
+- `notifyTopUp(blockIndex: Nat64)` in `main.mo` — admin-only; calls CMC (`rkp4c-7iaaa-aaaaa-aaaca-cai`) `notify_top_up` with HYVEIL's canister ID and the provided ICP transfer block index; returns cycles credited
+- `getIcpXdrConversionRate()` in `main.mo` — shared update; queries CMC for current ICP→XDR rate and caches it; returns `{ xdrPermyriadPerIcp: Nat64; timestampSeconds: Nat64 }`
+- CMC actor definition in `main.mo`
+- Nat64 import in `main.mo`
+- New types in `backend.d.ts`: `CmcTopUpResult`, `IcpXdrRate`
+- New functions in `backend.d.ts`: `notifyTopUp`, `getIcpXdrConversionRate`
+- "Convert ICP to Cycles" card in the admin dashboard (admin-only):
+  - Shows HYVEIL canister principal (for computing CMC deposit address)
+  - Shows current ICP→cycles conversion rate estimate
+  - Block index input + "Notify CMC" button
+  - Live feedback on cycles credited after success
+  - Step-by-step instructions
 
 ### Modify
-- `main.mo`: Add `system func timer` for hourly auto-refill of oracle + token canisters
-- Admin dashboard: Add auto-refill status card showing oracle and token canister cycles
+- `main.mo`: add CMC imports and two new public functions
+- `backend.d.ts`: add new types and function signatures
+- `App.tsx`: add CMC top-up panel to the admin dashboard section
 
 ### Remove
-- Nothing
+- Nothing removed
 
 ## Implementation Plan
-1. Add IC management `canister_status` interface to `main.mo`
-2. Add `checkAndRefillOwnedCanisters()` internal function — checks oracle and token canister cycles, tops up from reserve to 1 TC if below 1B
-3. Wire a `system func timer` (hourly = 3600 * 1_000_000_000 nanoseconds) to call the refill function
-4. Add `getPartnerCanisterCycles(partnerId)` public query using `canister_status`
-5. Add `topUpPartnerCanister(partnerId)` — deducts 1 ICP from partner balance, calls `deposit_cycles` to send 50B cycles to their canister
-6. Frontend: fetch cycles balance per partner canister on My Channels load
-7. Frontend: Show amber warning + "Top Up 1 ICP" button when < 200B cycles
-8. Frontend: Admin dashboard auto-refill status (oracle cycles, token cycles, last refill)
+1. Add `Nat64` import to `main.mo`
+2. Define CMC actor with `notify_top_up` and `get_icp_xdr_conversion_rate`
+3. Add `notifyTopUp(blockIndex: Nat64)` — admin-only, calls CMC, returns cycles credited as Nat
+4. Add `getIcpXdrConversionRate()` — calls CMC, caches result, returns rate
+5. Update `backend.d.ts` with new types and signatures
+6. Update admin dashboard in `App.tsx` with CMC top-up UI panel

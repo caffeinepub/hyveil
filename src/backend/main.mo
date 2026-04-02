@@ -9,6 +9,7 @@ import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Blob "mo:core/Blob";
 import Timer "mo:core/Timer";
+import Nat64 "mo:core/Nat64";
 
 import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
@@ -917,5 +918,85 @@ actor Main {
 
   public query func getHyveilCyclesBalance() : async Nat {
     Cycles.balance();
+  };
+
+  // --- CMC (Cycles Minting Canister) Integration ---
+  // CMC canister ID on mainnet: rkp4c-7iaaa-aaaaa-aaaca-cai
+  let cmc = actor("rkp4c-7iaaa-aaaaa-aaaca-cai") : actor {
+    notify_top_up : shared ({
+      canister_id : Principal;
+      block_index : Nat64;
+    }) -> async {
+      #Ok : Nat;
+      #Err : {
+        #Refunded : { block_index : ?Nat64; reason : Text };
+        #InvalidTransaction : Text;
+        #Other : { error_code : Nat64; error_message : Text };
+        #Processing;
+        #TransactionTooOld : Nat64;
+      };
+    };
+    get_icp_xdr_conversion_rate : shared query () -> async {
+      data : { xdr_permyriad_per_icp : Nat64; timestamp_seconds : Nat64 };
+      certificate : Blob;
+    };
+  };
+
+  // Cached conversion rate
+  var cachedXdrPermyriadPerIcp : Nat64 = 0;
+  var cachedRateTimestamp : Nat64 = 0;
+
+  /// Admin-only. After sending ICP to the CMC sub-account for HYVEIL's canister,
+  /// call this with the ICP ledger block index to notify CMC and receive cycles.
+  /// Returns the number of cycles credited to HYVEIL's canister.
+  public shared ({ caller }) func notifyTopUp(blockIndex : Nat64) : async Nat {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can call notifyTopUp");
+    };
+    let result = await cmc.notify_top_up({
+      canister_id = Principal.fromActor(Main);
+      block_index = blockIndex;
+    });
+    switch (result) {
+      case (#Ok(cyclesAdded)) { cyclesAdded };
+      case (#Err(#Refunded({ reason; block_index = _ }))) {
+        Runtime.trap("CMC refunded: " # reason);
+      };
+      case (#Err(#InvalidTransaction(msg))) {
+        Runtime.trap("Invalid transaction: " # msg);
+      };
+      case (#Err(#Other({ error_message; error_code = _ }))) {
+        Runtime.trap("CMC error: " # error_message);
+      };
+      case (#Err(#Processing)) {
+        Runtime.trap("CMC is still processing this transaction. Try again later.");
+      };
+      case (#Err(#TransactionTooOld(_))) {
+        Runtime.trap("Transaction is too old for CMC to process.");
+      };
+    };
+  };
+
+  /// Fetch and cache the current ICP to cycles conversion rate from the CMC.
+  /// Returns xdr_permyriad_per_icp (divide by 10000 to get XDR per ICP).
+  public shared func getIcpXdrConversionRate() : async {
+    xdrPermyriadPerIcp : Nat64;
+    timestampSeconds : Nat64;
+  } {
+    let rateResult = await cmc.get_icp_xdr_conversion_rate();
+    cachedXdrPermyriadPerIcp := rateResult.data.xdr_permyriad_per_icp;
+    cachedRateTimestamp := rateResult.data.timestamp_seconds;
+    {
+      xdrPermyriadPerIcp = cachedXdrPermyriadPerIcp;
+      timestampSeconds = cachedRateTimestamp;
+    };
+  };
+
+  /// Returns the last cached ICP/XDR rate without an async call.
+  public query func getCachedIcpXdrRate() : async {
+    xdrPermyriadPerIcp : Nat64;
+    timestampSeconds : Nat64;
+  } {
+    { xdrPermyriadPerIcp = cachedXdrPermyriadPerIcp; timestampSeconds = cachedRateTimestamp };
   };
 };

@@ -515,6 +515,14 @@ export default function App() {
     refillTarget: bigint;
   } | null>(null);
   const [autoRefillLoading, setAutoRefillLoading] = useState(false);
+  const [cmcRate, setCmcRate] = useState<bigint | null>(null);
+  const [cmcRateLoading, setCmcRateLoading] = useState(false);
+  const [cmcBlockIndex, setCmcBlockIndex] = useState("");
+  const [cmcNotifyLoading, setCmcNotifyLoading] = useState(false);
+  const [cmcResult, setCmcResult] = useState<{
+    success: boolean;
+    message: string;
+  } | null>(null);
   const [partnerCycles, setPartnerCycles] = useState<Record<string, bigint>>(
     {},
   );
@@ -643,6 +651,12 @@ export default function App() {
         .getAutoRefillStatus?.()
         .then((s: any) => {
           if (s) setAutoRefillStatus(s);
+        })
+        .catch(() => {});
+      (actor as any)
+        .getCachedIcpXdrRate?.()
+        .then((r: any) => {
+          if (r) setCmcRate(r.xdrPermyriadPerIcp);
         })
         .catch(() => {});
     }
@@ -1433,6 +1447,229 @@ export default function App() {
                       worth). Top up HYVEIL&apos;s canister cycles when balance
                       runs low.
                     </p>
+                  </div>
+                )}
+
+                {/* CMC Convert ICP to Cycles (Admin Only) */}
+                {isAdmin && (
+                  <div>
+                    <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-violet-400" />
+                      Convert ICP to Cycles
+                    </h3>
+                    <div className="glass-card rounded-2xl p-5 space-y-5">
+                      {/* Conversion Rate */}
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">
+                            Live Conversion Rate
+                          </p>
+                          <p className="text-xl font-bold text-violet-400">
+                            {cmcRate && cmcRate > 0n
+                              ? `1 ICP ≈ ${(Number(cmcRate) / 10000).toFixed(2)} TC`
+                              : "Rate unavailable — click Refresh"}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            1 XDR ≈ 1 TC on ICP mainnet
+                          </p>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-xs border border-violet-400/20 hover:bg-violet-400/10"
+                          disabled={cmcRateLoading}
+                          data-ocid="cmc.refresh_rate.button"
+                          onClick={async () => {
+                            if (!actor) return;
+                            setCmcRateLoading(true);
+                            try {
+                              const rate = await (
+                                actor as any
+                              ).getIcpXdrConversionRate?.();
+                              if (rate) setCmcRate(rate.xdrPermyriadPerIcp);
+                            } catch {
+                              // fallback to cached
+                              try {
+                                const cached = await (
+                                  actor as any
+                                ).getCachedIcpXdrRate?.();
+                                if (cached)
+                                  setCmcRate(cached.xdrPermyriadPerIcp);
+                              } catch {}
+                            } finally {
+                              setCmcRateLoading(false);
+                            }
+                          }}
+                        >
+                          {cmcRateLoading ? (
+                            <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-3 h-3 mr-1" />
+                          )}
+                          Refresh Rate
+                        </Button>
+                      </div>
+
+                      {/* Instructions */}
+                      <div className="bg-white/5 rounded-xl p-4 space-y-3 text-sm">
+                        <p className="font-semibold text-white/80 text-xs uppercase tracking-wide">
+                          How to top up cycles
+                        </p>
+                        <div className="space-y-2.5">
+                          <div className="flex gap-3">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/30 text-violet-300 text-xs flex items-center justify-center font-bold">
+                              1
+                            </span>
+                            <div className="flex-1">
+                              <p className="text-white/70 text-xs leading-relaxed">
+                                Copy HYVEIL&apos;s canister principal ID below —
+                                this is the target canister.
+                              </p>
+                              <div className="flex items-center gap-2 mt-1.5 bg-black/30 rounded-lg px-3 py-1.5">
+                                <code className="text-xs text-violet-300 font-mono flex-1 truncate">
+                                  {import.meta.env.VITE_CANISTER_ID_BACKEND ??
+                                    "Not available"}
+                                </code>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-xs hover:bg-violet-400/20"
+                                  data-ocid="cmc.copy_canister_id.button"
+                                  onClick={() => {
+                                    const id = import.meta.env
+                                      .VITE_CANISTER_ID_BACKEND;
+                                    if (id) navigator.clipboard.writeText(id);
+                                  }}
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex gap-3">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/30 text-violet-300 text-xs flex items-center justify-center font-bold">
+                              2
+                            </span>
+                            <p className="text-white/70 text-xs leading-relaxed">
+                              In the{" "}
+                              <strong className="text-white/90">NNS app</strong>
+                              , go to{" "}
+                              <em>Canisters → select HYVEIL → Add Cycles</em>.
+                              Enter your desired ICP amount, confirm, and note
+                              the{" "}
+                              <strong className="text-white/90">
+                                block index
+                              </strong>{" "}
+                              from the transaction receipt.
+                            </p>
+                          </div>
+                          <div className="flex gap-3">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/30 text-violet-300 text-xs flex items-center justify-center font-bold">
+                              3
+                            </span>
+                            <p className="text-white/70 text-xs leading-relaxed">
+                              Enter the block index below and click{" "}
+                              <strong className="text-white/90">
+                                Notify CMC
+                              </strong>{" "}
+                              to credit cycles to HYVEIL&apos;s reserve.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Notify CMC Form */}
+                      <div className="space-y-3">
+                        <div className="flex gap-2">
+                          <Input
+                            type="number"
+                            placeholder="Block index (e.g. 12345678)"
+                            value={cmcBlockIndex}
+                            onChange={(e) => {
+                              setCmcBlockIndex(e.target.value);
+                              setCmcResult(null);
+                            }}
+                            className="bg-white/5 border-white/10 text-sm"
+                            data-ocid="cmc.block_index.input"
+                          />
+                          <Button
+                            className="bg-violet-600 hover:bg-violet-500 text-white whitespace-nowrap"
+                            disabled={
+                              cmcNotifyLoading || !cmcBlockIndex || !actor
+                            }
+                            data-ocid="cmc.notify_cmc.button"
+                            onClick={async () => {
+                              if (!actor || !cmcBlockIndex) return;
+                              setCmcNotifyLoading(true);
+                              setCmcResult(null);
+                              try {
+                                const cycles = await (
+                                  actor as any
+                                ).notifyTopUp?.(BigInt(cmcBlockIndex));
+                                const tc =
+                                  cycles !== undefined
+                                    ? `${(Number(cycles) / 1_000_000_000_000).toFixed(2)} TC`
+                                    : "cycles";
+                                setCmcResult({
+                                  success: true,
+                                  message: `✓ ${tc} added to HYVEIL's cycles reserve`,
+                                });
+                                setCmcBlockIndex("");
+                                // Refresh cycles balance
+                                try {
+                                  const bal = await (
+                                    actor as any
+                                  ).getHyveilCyclesBalance?.();
+                                  if (bal !== undefined)
+                                    setHyveilCyclesBalance(bal);
+                                } catch {}
+                              } catch (err: any) {
+                                setCmcResult({
+                                  success: false,
+                                  message:
+                                    err?.message ??
+                                    "CMC notification failed. Check the block index and try again.",
+                                });
+                              } finally {
+                                setCmcNotifyLoading(false);
+                              }
+                            }}
+                          >
+                            {cmcNotifyLoading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />{" "}
+                                Notifying…
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="w-4 h-4 mr-1" /> Notify CMC
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                        {cmcResult && (
+                          <div
+                            data-ocid={
+                              cmcResult.success
+                                ? "cmc.success_state"
+                                : "cmc.error_state"
+                            }
+                            className={`text-sm rounded-xl px-4 py-3 flex items-center gap-2 ${
+                              cmcResult.success
+                                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20"
+                                : "bg-red-500/15 text-red-300 border border-red-500/20"
+                            }`}
+                          >
+                            {cmcResult.success ? (
+                              <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                            ) : (
+                              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                            )}
+                            {cmcResult.message}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
 

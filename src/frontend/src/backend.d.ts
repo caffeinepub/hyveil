@@ -117,6 +117,13 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
+export interface CmcTopUpResult {
+    cyclesAdded: bigint;
+}
+export interface IcpXdrRate {
+    xdrPermyriadPerIcp: bigint;
+    timestampSeconds: bigint;
+}
 export interface backendInterface {
     addComment(id: string, text: string): Promise<void>;
     addContentItem(partnerId: bigint, title: string, description: string, priceE8s: bigint, contentType: string): Promise<ContentItem>;
@@ -162,4 +169,13 @@ export interface backendInterface {
     setOraclePrincipal(p: Principal): Promise<void>;
     setTokenCanisterId(p: Principal): Promise<void>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
+    notifyTopUp(blockIndex: bigint): Promise<bigint>;
+    getIcpXdrConversionRate(): Promise<IcpXdrRate>;
+    getCachedIcpXdrRate(): Promise<IcpXdrRate>;
+    getAutoRefillStatus(): Promise<{ lastRefillTime: bigint; totalRefillCount: bigint; oracleCycles: bigint; tokenCycles: bigint; refillThreshold: bigint; refillTarget: bigint }>;
+    triggerAutoRefill(): Promise<void>;
+    getPartnerCanisterCycles(partnerId: bigint): Promise<bigint>;
+    topUpPartnerCanister(partnerId: bigint): Promise<void>;
+    deployTokenSystem(): Promise<{ tokenCanisterId: Principal; oracleCanisterId: Principal }>;
+    getTokenSystemStatus(): Promise<{ tokenDeployed: boolean; oracleDeployed: boolean; tokenCanisterId: Principal | null; oracleCanisterId: Principal | null; tokenWasmLoaded: boolean; oracleWasmLoaded: boolean }>;
 }
