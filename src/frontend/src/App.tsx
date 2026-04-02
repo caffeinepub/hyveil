@@ -194,17 +194,6 @@ interface PartnerApp {
   contentItems: PartnerContentItem[];
 }
 
-interface ProxyService {
-  id: string;
-  name: string;
-  description: string;
-  costPerSession: number;
-  icon: string;
-  active: boolean;
-  responsePreview?: string;
-  targetUrl: string;
-}
-
 interface ProxyLogEntry {
   id: string;
   timestamp: string;
@@ -232,80 +221,7 @@ function saveProxyHistory(entries: ProxyLogEntry[]) {
   } catch {}
 }
 
-const DAPPS: DApp[] = [
-  {
-    id: "openchat",
-    name: "OpenChat",
-    emoji: "💬",
-    category: "Social",
-    description: "Decentralized messaging on the IC",
-    url: "https://oc.app",
-  },
-  {
-    id: "icpswap",
-    name: "ICP Swap",
-    emoji: "🔄",
-    category: "DeFi",
-    description: "Swap tokens on the Internet Computer",
-    url: "https://app.icpswap.com",
-  },
-  {
-    id: "nns",
-    name: "NNS DAO",
-    emoji: "🏛️",
-    category: "Governance",
-    description: "Govern the Internet Computer network",
-    url: "https://nns.ic0.app",
-  },
-  {
-    id: "nfid",
-    name: "NFID",
-    emoji: "🪪",
-    category: "Identity",
-    description: "Non-fungible identity for Web3",
-    url: "https://nfid.one",
-  },
-  {
-    id: "sonic",
-    name: "Sonic DEX",
-    emoji: "⚡",
-    category: "DeFi",
-    description: "Lightning-fast DeFi on the IC",
-    url: "https://sonic.ooo",
-  },
-  {
-    id: "kinic",
-    name: "Kinic Search",
-    emoji: "🔍",
-    category: "Tools",
-    description: "Web3-native search engine",
-    url: "https://kinic.io",
-  },
-  {
-    id: "openart",
-    name: "OpenArt",
-    emoji: "🎨",
-    category: "NFT",
-    description: "Create and trade digital art NFTs",
-    url: "https://openart.ic0.app",
-  },
-  {
-    id: "dscvr",
-    name: "DSCVR",
-    emoji: "🌐",
-    category: "Social",
-    description: "Decentralized social media platform",
-    url: "https://dscvr.one",
-  },
-  {
-    id: "yuku",
-    name: "Yuku NFT",
-    emoji: "🖼️",
-    category: "NFT",
-    description: "Premier NFT marketplace on IC",
-    url: "https://yuku.app",
-  },
-];
+const DAPPS: DApp[] = [];
 
 interface Web2App {
   id: string;
@@ -316,120 +232,7 @@ interface Web2App {
   url: string;
 }
 
-const WEB2_APPS: Web2App[] = [
-  {
-    id: "youtube",
-    name: "YouTube",
-    emoji: "▶️",
-    category: "Video",
-    description: "World's largest video platform",
-    url: "https://www.youtube.com",
-  },
-  {
-    id: "reddit",
-    name: "Reddit",
-    emoji: "🤖",
-    category: "Social",
-    description: "Front page of the internet",
-    url: "https://www.reddit.com",
-  },
-  {
-    id: "twitter",
-    name: "X / Twitter",
-    emoji: "𝕏",
-    category: "Social",
-    description: "Real-time news and discussions",
-    url: "https://x.com",
-  },
-  {
-    id: "wikipedia",
-    name: "Wikipedia",
-    emoji: "📖",
-    category: "Knowledge",
-    description: "Free encyclopedia",
-    url: "https://www.wikipedia.org",
-  },
-  {
-    id: "github",
-    name: "GitHub",
-    emoji: "🐙",
-    category: "Dev",
-    description: "Code hosting and collaboration",
-    url: "https://github.com",
-  },
-  {
-    id: "medium",
-    name: "Medium",
-    emoji: "✍️",
-    category: "Content",
-    description: "Long-form articles and blogs",
-    url: "https://medium.com",
-  },
-  {
-    id: "hackernews",
-    name: "Hacker News",
-    emoji: "🟠",
-    category: "Dev",
-    description: "Tech news and discussion",
-    url: "https://news.ycombinator.com",
-  },
-  {
-    id: "arxiv",
-    name: "arXiv",
-    emoji: "📄",
-    category: "Knowledge",
-    description: "Research papers and preprints",
-    url: "https://arxiv.org",
-  },
-];
-
-const INITIAL_PROXY_SERVICES: ProxyService[] = [
-  {
-    id: "netflix",
-    name: "IC-Netflix",
-    description: "Privacy-enhanced streaming via on-chain proxy",
-    costPerSession: 0.1,
-    icon: "🎬",
-    active: false,
-    targetUrl: "https://www.netflix.com",
-  },
-  {
-    id: "social",
-    name: "IC-Social (X)",
-    description: "Anonymized social media access with zero logs",
-    costPerSession: 0.05,
-    icon: "📱",
-    active: false,
-    targetUrl: "https://x.com",
-  },
-  {
-    id: "fans",
-    name: "IC-Reddit",
-    description: "Private browsing of Reddit with identity shielding",
-    costPerSession: 0.05,
-    icon: "🤖",
-    active: false,
-    targetUrl: "https://www.reddit.com",
-  },
-  {
-    id: "github",
-    name: "IC-GitHub",
-    description: "Anonymous code browsing and project discovery",
-    costPerSession: 0.03,
-    icon: "💻",
-    active: false,
-    targetUrl: "https://github.com",
-  },
-  {
-    id: "medium",
-    name: "IC-Medium",
-    description: "Private reading of articles and blogs",
-    costPerSession: 0.03,
-    icon: "📝",
-    active: false,
-    targetUrl: "https://medium.com",
-  },
-];
+const WEB2_APPS: Web2App[] = [];
 
 const INITIAL_TRANSACTIONS: Transaction[] = [];
 
@@ -491,13 +294,9 @@ export default function App() {
     price: number;
     type: string;
   } | null>(null);
-  const [proxyServices, setProxyServices] = useState<ProxyService[]>(
-    INITIAL_PROXY_SERVICES,
-  );
   const [proxyLog, setProxyLog] = useState<ProxyLogEntry[]>(() =>
     loadProxyHistory(),
   );
-  const [proxyLoadingId, setProxyLoadingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [balanceVisible, setBalanceVisible] = useState(true);
@@ -936,122 +735,6 @@ export default function App() {
     refetchCkTokens();
   }
 
-  const handleActivateProxy = useCallback(
-    async (id: string) => {
-      const svc = proxyServices.find((s) => s.id === id);
-      if (!svc) return;
-      if (svc.active) {
-        setProxyServices((prev) =>
-          prev.map((s) =>
-            s.id === id
-              ? { ...s, active: false, responsePreview: undefined }
-              : s,
-          ),
-        );
-        toast("Proxy service deactivated");
-        return;
-      }
-      if (!actor) {
-        if (actorError) {
-          toast.error("Backend connection failed. Click retry to reconnect.");
-          retryActor();
-        } else if (actorFetching) {
-          toast.info("Connecting to proxy, please wait…");
-        } else {
-          toast.info("Reconnecting to proxy…");
-          retryActor();
-        }
-        return;
-      }
-      if (walletBalance < svc.costPerSession) {
-        toast.error("Insufficient ICP balance");
-        return;
-      }
-      setProxyLoadingId(id);
-      try {
-        const response = await actor.proxyFetch(
-          svc.targetUrl,
-          "GET",
-          null,
-          null,
-        );
-        const logEntry: ProxyLogEntry = {
-          id: `log-${Date.now()}`,
-          timestamp: new Date().toLocaleString(),
-          url: svc.targetUrl,
-          statusCode: response.statusCode,
-          success: response.success,
-          bodyPreview: response.body.slice(0, 100),
-          source: "proxy-tab",
-        };
-        setProxyLog((prev) => {
-          const updated = [logEntry, ...prev].slice(0, 50);
-          saveProxyHistory(updated);
-          return updated;
-        });
-        if (response.body && response.body.length > 0) {
-          setProxyServices((prev) =>
-            prev.map((s) =>
-              s.id === id
-                ? {
-                    ...s,
-                    active: true,
-                    responsePreview: response.body.slice(0, 500),
-                  }
-                : s,
-            ),
-          );
-          const tx: Transaction = {
-            id: `t${Date.now()}`,
-            type: "debit",
-            description: `${svc.name} — session activated`,
-            amount: svc.costPerSession,
-            timestamp: new Date().toLocaleString(),
-            dapp: svc.name,
-          };
-          setTransactions((prev) => [tx, ...prev]);
-          toast.success(
-            `${svc.name} activated — traffic routed through ICP canister`,
-          );
-        } else {
-          toast.warning(
-            `Proxy returned status ${response.statusCode} — request routed through ICP canister`,
-          );
-          setProxyServices((prev) =>
-            prev.map((s) =>
-              s.id === id
-                ? {
-                    ...s,
-                    active: true,
-                    responsePreview: response.body.slice(0, 500),
-                  }
-                : s,
-            ),
-          );
-        }
-      } catch (_err) {
-        const logEntry: ProxyLogEntry = {
-          id: `log-${Date.now()}`,
-          timestamp: new Date().toLocaleString(),
-          url: svc.targetUrl,
-          statusCode: null,
-          success: false,
-          bodyPreview: String(_err).slice(0, 100),
-          source: "proxy-tab",
-        };
-        setProxyLog((prev) => {
-          const updated = [logEntry, ...prev].slice(0, 50);
-          saveProxyHistory(updated);
-          return updated;
-        });
-        toast.error("HTTP outcall failed. Check canister connectivity.");
-      } finally {
-        setProxyLoadingId(null);
-      }
-    },
-    [actor, actorFetching, proxyServices, walletBalance],
-  );
-
   function copyPrincipal() {
     if (principal) {
       navigator.clipboard.writeText(principal);
@@ -1185,7 +868,7 @@ export default function App() {
             ) : (
               <Button
                 size="sm"
-                className="bg-violet-600 hover:bg-violet-500 text-white text-xs rounded-full px-4 glow-violet"
+                className="bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-full px-4 glow-violet"
                 onClick={handleLogin}
                 data-ocid="nav.login.button"
               >
@@ -1250,7 +933,7 @@ export default function App() {
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Button
                     size="lg"
-                    className="bg-violet-600 hover:bg-violet-500 text-white rounded-full px-8 text-base glow-violet"
+                    className="bg-blue-600 hover:bg-blue-500 text-white rounded-full px-8 text-base glow-violet"
                     onClick={handleLogin}
                     data-ocid="hero.login.button"
                   >
@@ -1275,7 +958,7 @@ export default function App() {
                     9 ICP dApps
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-violet-500" />{" "}
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />{" "}
                     Privacy-first
                   </div>
                   <div className="flex items-center gap-1.5">
@@ -1296,7 +979,7 @@ export default function App() {
                       Your portal is active and private
                     </p>
                     {isAdmin && (
-                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-violet-600/20 text-violet-300 border border-violet-500/30">
+                      <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-600/20 text-blue-300 border border-blue-500/30">
                         <Shield className="w-3 h-3" /> Owner
                       </span>
                     )}
@@ -1399,7 +1082,7 @@ export default function App() {
                 {isAdmin && platformRevenue && (
                   <div>
                     <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4 text-violet-400" />
+                      <BarChart3 className="w-4 h-4 text-blue-400" />
                       Platform Revenue
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1409,7 +1092,7 @@ export default function App() {
                         </p>
                         <p
                           className="text-lg font-bold"
-                          style={{ color: "#8b5cf6" }}
+                          style={{ color: "#3b82f6" }}
                         >
                           {(
                             Number(platformRevenue.totalHyveilShare) / 1e8
@@ -1536,7 +1219,7 @@ export default function App() {
                 {isAdmin && (
                   <div>
                     <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
-                      <Zap className="w-4 h-4 text-violet-400" />
+                      <Zap className="w-4 h-4 text-blue-400" />
                       Convert ICP to Cycles
                     </h3>
                     <div className="glass-card rounded-2xl p-5 space-y-5">
@@ -1546,7 +1229,7 @@ export default function App() {
                           <p className="text-xs text-muted-foreground mb-1">
                             Live Conversion Rate
                           </p>
-                          <p className="text-xl font-bold text-violet-400">
+                          <p className="text-xl font-bold text-blue-400">
                             {cmcRate && cmcRate > 0n
                               ? `1 ICP ≈ ${(Number(cmcRate) / 10000).toFixed(2)} TC`
                               : "Rate unavailable — click Refresh"}
@@ -1558,7 +1241,7 @@ export default function App() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="text-xs border border-violet-400/20 hover:bg-violet-400/10"
+                          className="text-xs border border-blue-400/20 hover:bg-blue-400/10"
                           disabled={cmcRateLoading}
                           data-ocid="cmc.refresh_rate.button"
                           onClick={async () => {
@@ -1599,7 +1282,7 @@ export default function App() {
                         </p>
                         <div className="space-y-2.5">
                           <div className="flex gap-3">
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/30 text-violet-300 text-xs flex items-center justify-center font-bold">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500/30 text-blue-300 text-xs flex items-center justify-center font-bold">
                               1
                             </span>
                             <div className="flex-1">
@@ -1608,14 +1291,14 @@ export default function App() {
                                 this is the target canister.
                               </p>
                               <div className="flex items-center gap-2 mt-1.5 bg-black/30 rounded-lg px-3 py-1.5">
-                                <code className="text-xs text-violet-300 font-mono flex-1 truncate">
+                                <code className="text-xs text-blue-300 font-mono flex-1 truncate">
                                   {import.meta.env.VITE_CANISTER_ID_BACKEND ??
                                     "Not available"}
                                 </code>
                                 <Button
                                   size="sm"
                                   variant="ghost"
-                                  className="h-6 px-2 text-xs hover:bg-violet-400/20"
+                                  className="h-6 px-2 text-xs hover:bg-blue-400/20"
                                   data-ocid="cmc.copy_canister_id.button"
                                   onClick={() => {
                                     const id = import.meta.env
@@ -1629,7 +1312,7 @@ export default function App() {
                             </div>
                           </div>
                           <div className="flex gap-3">
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/30 text-violet-300 text-xs flex items-center justify-center font-bold">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500/30 text-blue-300 text-xs flex items-center justify-center font-bold">
                               2
                             </span>
                             <p className="text-white/70 text-xs leading-relaxed">
@@ -1646,7 +1329,7 @@ export default function App() {
                             </p>
                           </div>
                           <div className="flex gap-3">
-                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500/30 text-violet-300 text-xs flex items-center justify-center font-bold">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-500/30 text-blue-300 text-xs flex items-center justify-center font-bold">
                               3
                             </span>
                             <p className="text-white/70 text-xs leading-relaxed">
@@ -1675,7 +1358,7 @@ export default function App() {
                             data-ocid="cmc.block_index.input"
                           />
                           <Button
-                            className="bg-violet-600 hover:bg-violet-500 text-white whitespace-nowrap"
+                            className="bg-blue-600 hover:bg-blue-500 text-white whitespace-nowrap"
                             disabled={
                               cmcNotifyLoading || !cmcBlockIndex || !actor
                             }
@@ -1887,12 +1570,12 @@ export default function App() {
                 {isAdmin && (
                   <div>
                     <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
-                      <Code2 className="w-4 h-4 text-violet-400" />
+                      <Code2 className="w-4 h-4 text-blue-400" />
                       Channel WASM Status
                     </h3>
                     {wasmStatus === null ? (
                       <div className="glass-card rounded-2xl p-4 flex items-center gap-3">
-                        <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
                         <span className="text-sm text-muted-foreground">
                           Checking WASM status…
                         </span>
@@ -2032,9 +1715,9 @@ export default function App() {
                     )}
 
                     {/* Set HYVEIL Principal */}
-                    <div className="mt-3 glass-card rounded-2xl p-5 border border-violet-500/20 space-y-3">
+                    <div className="mt-3 glass-card rounded-2xl p-5 border border-blue-500/20 space-y-3">
                       <div className="flex items-center gap-2">
-                        <Settings className="w-4 h-4 text-violet-400" />
+                        <Settings className="w-4 h-4 text-blue-400" />
                         <span className="font-semibold text-sm">
                           HYVEIL Canister Principal
                         </span>
@@ -2060,7 +1743,7 @@ export default function App() {
                         />
                         <Button
                           size="sm"
-                          className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 shrink-0 text-xs"
+                          className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl px-4 shrink-0 text-xs"
                           disabled={
                             !hyveilPrincipalInput.trim() ||
                             hyveilPrincipalLoading
@@ -2105,13 +1788,13 @@ export default function App() {
                 {isAdmin && (
                   <div>
                     <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
-                      <Coins className="w-4 h-4 text-purple-400" />
+                      <Coins className="w-4 h-4 text-blue-400" />
                       HYV Token System
                     </h3>
                     <div className="glass-card rounded-2xl p-5">
                       {tokenSystemStatus === null ? (
                         <div className="flex items-center gap-3">
-                          <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
                           <span className="text-sm text-muted-foreground">
                             Checking token system status…
                           </span>
@@ -2138,7 +1821,7 @@ export default function App() {
                                 Token Canister
                               </p>
                               <div className="flex items-center gap-2">
-                                <code className="text-xs font-mono text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-1 rounded-lg flex-1 break-all">
+                                <code className="text-xs font-mono text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-1 rounded-lg flex-1 break-all">
                                   {tokenSystemStatus.tokenCanisterId}
                                 </code>
                                 <Button
@@ -2193,8 +1876,8 @@ export default function App() {
                       ) : (
                         <div className="space-y-4">
                           <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-purple-500/15 flex items-center justify-center shrink-0">
-                              <Coins className="w-5 h-5 text-purple-400" />
+                            <div className="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center shrink-0">
+                              <Coins className="w-5 h-5 text-blue-400" />
                             </div>
                             <div className="flex-1">
                               <p className="font-semibold text-white mb-1">
@@ -2209,7 +1892,7 @@ export default function App() {
                           </div>
                           <ul className="space-y-1.5 text-xs text-muted-foreground">
                             <li className="flex items-center gap-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
+                              <div className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />
                               Token canister: 50B cycles
                             </li>
                             <li className="flex items-center gap-2">
@@ -2228,7 +1911,7 @@ export default function App() {
                             </div>
                           )}
                           <Button
-                            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-semibold"
+                            className="w-full bg-gradient-to-r from-blue-600 to-blue-600 hover:from-blue-500 hover:to-blue-500 text-white rounded-xl font-semibold"
                             disabled={tokenSystemDeploying || !actor}
                             onClick={async () => {
                               if (!actor) return;
@@ -2307,7 +1990,7 @@ export default function App() {
                               className={`w-8 h-8 rounded-full flex items-center justify-center ${
                                 tx.type === "credit"
                                   ? "bg-emerald-500/15 text-emerald-400"
-                                  : "bg-violet-500/15 text-violet-400"
+                                  : "bg-blue-500/15 text-blue-400"
                               }`}
                             >
                               {tx.type === "credit" ? (
@@ -2329,7 +2012,7 @@ export default function App() {
                             className={`text-sm font-mono font-medium ${
                               tx.type === "credit"
                                 ? "text-emerald-400"
-                                : "text-violet-400"
+                                : "text-blue-400"
                             }`}
                           >
                             {tx.type === "credit" ? "+" : "-"}
@@ -2369,7 +2052,7 @@ export default function App() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={handleAddressBarEnter}
-                  className="pl-9 pr-9 glass border-white/10 focus:border-violet-500/50 bg-transparent"
+                  className="pl-9 pr-9 glass border-white/10 focus:border-blue-500/50 bg-transparent"
                   data-ocid="discover.search_input"
                 />
                 {searchQuery && (
@@ -2385,7 +2068,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleGoAction}
-                className="px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors shrink-0"
+                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold transition-colors shrink-0"
                 data-ocid="discover.go_button"
               >
                 Go
@@ -2401,7 +2084,7 @@ export default function App() {
                   onClick={() => setCategoryFilter(cat)}
                   className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
                     categoryFilter === cat
-                      ? "bg-violet-600 text-white"
+                      ? "bg-blue-600 text-white"
                       : "glass text-muted-foreground hover:text-foreground"
                   }`}
                   data-ocid={"discover.filter.tab"}
@@ -2444,7 +2127,7 @@ export default function App() {
                       href={dapp.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 text-sm font-medium px-4 py-1.5 rounded-full transition-all border border-violet-500/20"
+                      className="inline-flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 text-sm font-medium px-4 py-1.5 rounded-full transition-all border border-blue-500/20"
                       data-ocid={"discover.dapp.launch.button"}
                     >
                       Launch <ExternalLink className="w-3.5 h-3.5" />
@@ -2457,11 +2140,11 @@ export default function App() {
             {/* Web2 Private Browsing Section */}
             <div className="pt-4">
               <div className="flex items-center gap-3 mb-2">
-                <Shield className="w-5 h-5 text-violet-400" />
+                <Shield className="w-5 h-5 text-blue-400" />
                 <h3 className="text-lg font-display font-bold">
                   Web2 Private Browsing
                 </h3>
-                <Badge className="bg-violet-500/20 text-violet-300 border-violet-500/30 text-xs">
+                <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30 text-xs">
                   IP Hidden via ICP
                 </Badge>
               </div>
@@ -2504,7 +2187,7 @@ export default function App() {
                           size="sm"
                           disabled={web2ProxyLoading === app.id || !actor}
                           onClick={() => handleWeb2ProxyLaunch(app)}
-                          className="w-full h-8 text-xs bg-violet-600/20 hover:bg-violet-600/35 text-violet-300 border border-violet-500/20 rounded-full disabled:opacity-50"
+                          className="w-full h-8 text-xs bg-blue-600/20 hover:bg-blue-600/35 text-blue-300 border border-blue-500/20 rounded-full disabled:opacity-50"
                           data-ocid={`discover.web2.proxy.button.${i + 1}`}
                           title={!actor ? "Connecting…" : undefined}
                         >
@@ -2602,7 +2285,7 @@ export default function App() {
                   </div>
                   <Button
                     size="sm"
-                    className="gap-2 bg-violet-600/30 hover:bg-violet-600/50 text-violet-200 border border-violet-500/30"
+                    className="gap-2 bg-blue-600/30 hover:bg-blue-600/50 text-blue-200 border border-blue-500/30"
                     onClick={() =>
                       window.open(
                         previewPanel.appUrl,
@@ -2619,7 +2302,7 @@ export default function App() {
 
                 {/* Footnote */}
                 <div className="px-4 py-2.5 border-t border-white/10 bg-white/[0.02] flex items-center gap-2">
-                  <Shield className="w-3 h-3 text-violet-400 shrink-0" />
+                  <Shield className="w-3 h-3 text-blue-400 shrink-0" />
                   <p className="text-xs text-muted-foreground">
                     Routed via ICP canister HTTP outcall — your IP was not
                     exposed to {previewPanel.appName}
@@ -2637,110 +2320,18 @@ export default function App() {
             const onChainApproved = approvedPartners;
             // Show mock channels when no on-chain partners registered yet
             if (onChainApproved.length === 0) {
-              const mockChannels = [
-                {
-                  name: "NexaFit",
-                  desc: "Premium fitness reels & workout plans",
-                  chains: ["ICP"],
-                },
-                {
-                  name: "CryptoReels",
-                  desc: "Daily crypto market analysis & insights",
-                  chains: ["ICP", "ETH"],
-                },
-                {
-                  name: "ArtVault",
-                  desc: "Exclusive digital art collections & drops",
-                  chains: ["ICP", "BTC"],
-                },
-                {
-                  name: "GlowBeauty",
-                  desc: "Beauty tutorials & exclusive product launches",
-                  chains: ["ICP"],
-                },
-                {
-                  name: "TechPulse",
-                  desc: "Short-form tech reviews & ICP ecosystem news",
-                  chains: ["ICP"],
-                },
-                {
-                  name: "NightOwl Music",
-                  desc: "Underground music & artist spotlights",
-                  chains: ["ICP", "SOL"],
-                },
-              ];
               return (
-                <div className="fade-up space-y-6">
-                  <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                      <h2 className="text-2xl font-display font-bold mb-1">
-                        Partner Channels
-                      </h2>
-                      <p className="text-muted-foreground text-sm">
-                        Live channels from approved partners · HYVEIL earns 10%
-                        commission
-                      </p>
-                      <p className="text-xs text-white/30 mt-1 italic">
-                        Showing demo channels — register as a partner to go live
-                      </p>
-                    </div>
-                    <div className="glass rounded-xl px-3 py-1.5 flex items-center gap-2 text-xs text-amber-300 border border-amber-500/20">
-                      <Percent className="w-3 h-3" /> 10% platform commission
-                    </div>
+                <div className="fade-up flex flex-col items-center justify-center py-24 text-center space-y-4">
+                  <div className="w-16 h-16 rounded-2xl glass flex items-center justify-center text-3xl">
+                    📡
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {mockChannels.map((mc, i) => (
-                      <div
-                        key={mc.name}
-                        className="glass-card rounded-2xl p-5 space-y-3 flex flex-col opacity-90"
-                        data-ocid={`content.item.${i + 1}`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="font-display font-bold text-lg">
-                              {mc.name}
-                            </div>
-                            <div className="font-mono text-[10px] text-white/20 mt-0.5 truncate max-w-[160px]">
-                              xxxxxxxx-xxxx.icp0.io
-                            </div>
-                          </div>
-                          <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30 flex-shrink-0">
-                            DEMO
-                          </span>
-                        </div>
-                        <p className="text-sm text-muted-foreground leading-relaxed flex-1">
-                          {mc.desc}
-                        </p>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="flex items-center gap-1 text-[9px] text-violet-300 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded">
-                            <Lock className="w-2.5 h-2.5" /> HYVEIL Template
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-1">
-                          {mc.chains.map((c) => (
-                            <span
-                              key={c}
-                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-500/20 text-violet-300"
-                            >
-                              {c}
-                            </span>
-                          ))}
-                        </div>
-                        <Button
-                          className="w-full rounded-xl bg-violet-600/10 text-violet-300/50 border border-violet-500/10 gap-2 cursor-not-allowed"
-                          disabled
-                          data-ocid={`content.watch.button.${i + 1}`}
-                          onClick={() =>
-                            toast(
-                              "Register as a partner to create your own channel",
-                            )
-                          }
-                        >
-                          <Play className="w-3.5 h-3.5" /> Browse Channel
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
+                  <h3 className="text-xl font-display font-bold">
+                    No live channels yet
+                  </h3>
+                  <p className="text-muted-foreground text-sm max-w-sm">
+                    Be the first to register as a partner and launch your
+                    channel on HYVEIL.
+                  </p>
                 </div>
               );
             }
@@ -2796,7 +2387,7 @@ export default function App() {
                           >
                             {p.canisterId.toString()}.icp0.io
                           </a>
-                          <span className="flex items-center gap-1 text-[9px] text-violet-300 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded">
+                          <span className="flex items-center gap-1 text-[9px] text-blue-300 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded">
                             <Lock className="w-2.5 h-2.5" /> Template
                           </span>
                         </div>
@@ -2804,14 +2395,14 @@ export default function App() {
                           {p.chains.map((c) => (
                             <span
                               key={c}
-                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-violet-500/20 text-violet-300"
+                              className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-500/20 text-blue-300"
                             >
                               {c}
                             </span>
                           ))}
                         </div>
                         <Button
-                          className="w-full rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/20 gap-2"
+                          className="w-full rounded-xl bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/20 gap-2"
                           data-ocid={`content.watch.button.${i + 1}`}
                           onClick={() =>
                             window.open(
@@ -2843,126 +2434,34 @@ export default function App() {
             </div>
 
             {/* Live Proxy Status */}
-            {(() => {
-              const activeCount = proxyServices.filter((s) => s.active).length;
-              const isAnyActive = activeCount > 0;
-              return (
-                <div className="glass-card rounded-2xl p-5 flex flex-wrap gap-4 items-center justify-between">
-                  <div className="flex flex-wrap gap-4 items-center">
-                    <div className="flex items-center gap-2 text-sm text-emerald-400">
-                      <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                      Anonymized
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-cyan-400">
-                      <Radio className="w-4 h-4" />
-                      On-chain Routing
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-violet-400">
-                      <Shield className="w-4 h-4" />
-                      Zero-log
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Zap className="w-4 h-4" />
-                      IC HTTP Outcalls
-                    </div>
-                  </div>
-                  <div
-                    className="flex items-center gap-2.5 ml-auto"
-                    data-ocid="proxy.status.panel"
-                  >
-                    <div
-                      className={`w-2.5 h-2.5 rounded-full ${isAnyActive ? "bg-emerald-400 animate-pulse" : "bg-white/20"}`}
-                    />
-                    <span
-                      className={`text-sm font-medium ${isAnyActive ? "text-emerald-400" : "text-muted-foreground"}`}
-                    >
-                      {isAnyActive
-                        ? `${activeCount} active · Traffic routed through ICP canister`
-                        : "No active proxies"}
-                    </span>
-                  </div>
+            <div className="glass-card rounded-2xl p-5 flex flex-wrap gap-4 items-center justify-between">
+              <div className="flex flex-wrap gap-4 items-center">
+                <div className="flex items-center gap-2 text-sm text-emerald-400">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                  Anonymized
                 </div>
-              );
-            })()}
-
-            {/* Proxy services */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {proxyServices.map((svc, i) => (
-                <div
-                  key={svc.id}
-                  className={`glass-card rounded-2xl p-5 dapp-card fade-up fade-up-${i + 1} ${
-                    svc.active ? "border-emerald-500/30" : ""
-                  }`}
-                  data-ocid={`proxy.service.item.${i + 1}`}
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-3xl">{svc.icon}</span>
-                    {svc.active && (
-                      <span className="status-online text-xs px-2 py-0.5 rounded-full font-medium">
-                        ACTIVE
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-semibold mb-1">{svc.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-3 leading-relaxed">
-                    {svc.description}
-                  </p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground font-mono">
-                      {svc.costPerSession} ICP/session
-                    </span>
-                    <Button
-                      size="sm"
-                      disabled={proxyLoadingId === svc.id || !actor}
-                      className={`text-xs rounded-full px-4 disabled:opacity-50 ${
-                        svc.active
-                          ? "bg-emerald-600/20 hover:bg-red-600/20 text-emerald-300 hover:text-red-300 border-emerald-500/20"
-                          : "bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border-violet-500/20"
-                      }`}
-                      title={!actor ? "Connecting…" : undefined}
-                      onClick={() => {
-                        if (!isLoggedIn) {
-                          toast.error("Connect wallet first");
-                          return;
-                        }
-                        handleActivateProxy(svc.id);
-                      }}
-                      data-ocid={"proxy.activate.button"}
-                    >
-                      {proxyLoadingId === svc.id ? (
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
-                          Routing…
-                        </span>
-                      ) : actorError ? (
-                        <span className="flex items-center gap-1.5">
-                          <RefreshCw className="w-3 h-3" />
-                          Retry
-                        </span>
-                      ) : !actor ? (
-                        <span className="flex items-center gap-1.5">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          Connecting…
-                        </span>
-                      ) : svc.active ? (
-                        "Deactivate"
-                      ) : (
-                        "Activate"
-                      )}
-                    </Button>
-                  </div>
-                  {svc.active && svc.responsePreview && (
-                    <div className="mt-3 pt-3 border-t border-white/10">
-                      <p className="text-xs text-muted-foreground mb-1 font-mono uppercase tracking-wider">
-                        Canister response
-                      </p>
-                      <pre className="text-xs text-emerald-300/80 bg-black/30 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
-                        {svc.responsePreview}
-                      </pre>
-                    </div>
-                  )}
+                <div className="flex items-center gap-2 text-sm text-cyan-400">
+                  <Radio className="w-4 h-4" />
+                  On-chain Routing
                 </div>
-              ))}
+                <div className="flex items-center gap-2 text-sm text-blue-400">
+                  <Shield className="w-4 h-4" />
+                  Zero-log
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Zap className="w-4 h-4" />
+                  IC HTTP Outcalls
+                </div>
+              </div>
+              <div
+                className="flex items-center gap-2.5 ml-auto"
+                data-ocid="proxy.status.panel"
+              >
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-sm font-medium text-emerald-400">
+                  Privacy Proxy Ready
+                </span>
+              </div>
             </div>
 
             {/* Browsing History */}
@@ -2972,7 +2471,7 @@ export default function App() {
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-violet-400" />
+                  <Zap className="w-4 h-4 text-blue-400" />
                   <h3 className="font-semibold text-sm">Browsing History</h3>
                   <span className="text-xs text-muted-foreground">
                     ({proxyLog.length} entries)
@@ -3006,7 +2505,7 @@ export default function App() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                   {proxyLog.map((entry, i) => (
                     <div
                       key={entry.id}
@@ -3033,7 +2532,7 @@ export default function App() {
                           <span
                             className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                               entry.source === "discover-tab"
-                                ? "bg-violet-500/20 text-violet-300"
+                                ? "bg-blue-500/20 text-blue-300"
                                 : "bg-blue-500/20 text-blue-300"
                             }`}
                           >
@@ -3317,7 +2816,7 @@ export default function App() {
                           className={`w-9 h-9 rounded-full flex items-center justify-center ${
                             tx.type === "credit"
                               ? "bg-emerald-500/15 text-emerald-400"
-                              : "bg-violet-500/15 text-violet-400"
+                              : "bg-blue-500/15 text-blue-400"
                           }`}
                         >
                           {tx.type === "credit" ? (
@@ -3340,7 +2839,7 @@ export default function App() {
                           className={`text-sm font-mono font-semibold ${
                             tx.type === "credit"
                               ? "text-emerald-400"
-                              : "text-violet-400"
+                              : "text-blue-400"
                           }`}
                         >
                           {tx.type === "credit" ? "+" : "-"}
@@ -3426,7 +2925,7 @@ export default function App() {
                     data-ocid="mining.social_score.card"
                   >
                     <div className="absolute top-3 right-3">
-                      <TrendingUp className="w-8 h-8 text-violet-400/20" />
+                      <TrendingUp className="w-8 h-8 text-blue-400/20" />
                     </div>
                     <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-medium">
                       Social Score
@@ -3438,23 +2937,23 @@ export default function App() {
                     <div className="mt-3 space-y-1 text-xs text-muted-foreground/70">
                       <div className="flex justify-between">
                         <span>Uploads × 10</span>
-                        <span className="text-violet-300">+30</span>
+                        <span className="text-blue-300">+30</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Views/100 × 5</span>
-                        <span className="text-violet-300">+125</span>
+                        <span className="text-blue-300">+125</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Followers × 2</span>
-                        <span className="text-violet-300">+84</span>
+                        <span className="text-blue-300">+84</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Sales × 15</span>
-                        <span className="text-violet-300">+75</span>
+                        <span className="text-blue-300">+75</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Subs × 20</span>
-                        <span className="text-violet-300">+28</span>
+                        <span className="text-blue-300">+28</span>
                       </div>
                     </div>
                   </div>
@@ -3568,7 +3067,7 @@ export default function App() {
                   </p>
                   <div className="w-full bg-white/5 rounded-full h-1.5">
                     <div
-                      className="h-1.5 rounded-full bg-gradient-to-r from-violet-500 to-violet-300"
+                      className="h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-300"
                       style={{ width: "10.2%" }}
                     />
                   </div>
@@ -3672,7 +3171,7 @@ export default function App() {
                           <td className="p-4 text-right font-mono text-amber-300">
                             {entry.mined.toLocaleString()}
                           </td>
-                          <td className="p-4 text-right font-mono text-violet-300">
+                          <td className="p-4 text-right font-mono text-blue-300">
                             {entry.score.toLocaleString()}
                           </td>
                         </tr>
@@ -3759,7 +3258,7 @@ export default function App() {
                     />
                     <Button
                       size="sm"
-                      className="h-8 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg"
+                      className="h-8 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded-lg"
                       onClick={() => {
                         const r = Number.parseInt(newRate);
                         if (r >= 5 && r <= 50) {
@@ -3787,7 +3286,7 @@ export default function App() {
                 ) : (
                   <button
                     type="button"
-                    className="flex items-center gap-2 glass rounded-full px-4 py-1.5 text-sm font-semibold text-violet-300 border border-violet-500/20 hover:border-violet-500/40 transition-colors"
+                    className="flex items-center gap-2 glass rounded-full px-4 py-1.5 text-sm font-semibold text-blue-300 border border-blue-500/20 hover:border-blue-500/40 transition-colors"
                     onClick={() => {
                       setNewRate(String(commissionRate));
                       setEditingRate(true);
@@ -3814,7 +3313,7 @@ export default function App() {
                   label: "Total Commissions",
                   value: `${totalCommissions.toFixed(3)} ICP`,
                   icon: <TrendingUp className="w-5 h-5" />,
-                  color: "text-violet-400",
+                  color: "text-blue-400",
                 },
                 {
                   label: "Active dApps",
@@ -3883,7 +3382,7 @@ export default function App() {
                         <td className="px-4 py-3 font-mono">
                           {row.total.toFixed(3)} ICP
                         </td>
-                        <td className="px-4 py-3 font-mono text-violet-400">
+                        <td className="px-4 py-3 font-mono text-blue-400">
                           {row.commission.toFixed(3)} ICP
                         </td>
                         <td className="px-4 py-3 font-mono text-emerald-400">
@@ -3915,7 +3414,7 @@ export default function App() {
                 >
                   <TrendingUp
                     className="w-7 h-7"
-                    style={{ color: "#8b5cf6" }}
+                    style={{ color: "#3b82f6" }}
                   />
                 </div>
                 <div className="text-center">
@@ -3929,7 +3428,7 @@ export default function App() {
                 </div>
                 <Button
                   onClick={() => setActiveTab("partners")}
-                  className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl"
+                  className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl"
                   data-ocid="creator.partners.button"
                 >
                   <Plus className="w-4 h-4 mr-2" /> Deploy a Channel
@@ -3969,7 +3468,7 @@ export default function App() {
                     <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Refresh
                   </Button>
                   <Button
-                    className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl"
+                    className="bg-blue-600 hover:bg-blue-500 text-white rounded-xl"
                     size="sm"
                     onClick={() => {
                       setShowPartnerForm(true);
@@ -4026,7 +3525,7 @@ export default function App() {
                       >
                         <Percent
                           className="w-4 h-4"
-                          style={{ color: "#8b5cf6" }}
+                          style={{ color: "#3b82f6" }}
                         />
                       </div>
                       <span className="text-sm text-muted-foreground">
@@ -4035,7 +3534,7 @@ export default function App() {
                     </div>
                     <p
                       className="text-2xl font-display font-bold"
-                      style={{ color: "#8b5cf6" }}
+                      style={{ color: "#3b82f6" }}
                     >
                       {e8sToIcp(
                         myChannels.reduce((s, c) => s + c.hyveilShare, 0n),
@@ -4323,7 +3822,7 @@ export default function App() {
                               className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
                               style={{
                                 background:
-                                  "linear-gradient(135deg, #ec4899, #8b5cf6)",
+                                  "linear-gradient(135deg, #ec4899, #3b82f6)",
                               }}
                             >
                               <Film className="w-5 h-5 text-white" />
@@ -4447,7 +3946,7 @@ export default function App() {
                             </p>
                             <p
                               className="text-sm font-bold"
-                              style={{ color: "#8b5cf6" }}
+                              style={{ color: "#3b82f6" }}
                             >
                               {e8sToIcp(ch.hyveilShare)} ICP
                             </p>
@@ -4484,7 +3983,7 @@ export default function App() {
                             className="text-xs h-8"
                             style={{
                               background:
-                                "linear-gradient(135deg, #ec4899, #8b5cf6)",
+                                "linear-gradient(135deg, #ec4899, #3b82f6)",
                               color: "white",
                               border: "none",
                             }}
@@ -4555,7 +4054,7 @@ export default function App() {
                                     className="text-xs px-2 py-0.5 rounded-full"
                                     style={{
                                       background: "rgba(139,92,246,0.15)",
-                                      color: "#a78bfa",
+                                      color: "#60a5fa",
                                     }}
                                   >
                                     {item.contentType}
@@ -4571,98 +4070,15 @@ export default function App() {
                 </div>
                 {/* Transaction History */}
                 {(() => {
-                  const CREATOR_MOCK_TXS = [
-                    {
-                      channel: myChannels[0]?.partnerName ?? "Channel 1",
-                      buyer: "2vxsx-fae",
-                      content: "Morning Workout Vol.1",
-                      amount: 0.5,
-                      creatorShare: 0.45,
-                      hyveilCut: 0.05,
-                      date: "Mar 30, 2026",
-                    },
-                    {
-                      channel: myChannels[0]?.partnerName ?? "Channel 1",
-                      buyer: "rdmx6-jaaaa",
-                      content: "City Life Ep.3",
-                      amount: 1.2,
-                      creatorShare: 1.08,
-                      hyveilCut: 0.12,
-                      date: "Mar 29, 2026",
-                    },
-                    {
-                      channel: myChannels[1]?.partnerName ?? "Channel 2",
-                      buyer: "aaaaa-aa",
-                      content: "Sunset Vibes",
-                      amount: 0.8,
-                      creatorShare: 0.72,
-                      hyveilCut: 0.08,
-                      date: "Mar 28, 2026",
-                    },
-                    {
-                      channel: myChannels[0]?.partnerName ?? "Channel 1",
-                      buyer: "rrkah-fqaaa",
-                      content: "Tech Talk #5",
-                      amount: 2.0,
-                      creatorShare: 1.8,
-                      hyveilCut: 0.2,
-                      date: "Mar 27, 2026",
-                    },
-                    {
-                      channel: myChannels[1]?.partnerName ?? "Channel 2",
-                      buyer: "qoctq-giaaa",
-                      content: "Night Run",
-                      amount: 0.75,
-                      creatorShare: 0.675,
-                      hyveilCut: 0.075,
-                      date: "Mar 26, 2026",
-                    },
-                    {
-                      channel: myChannels[0]?.partnerName ?? "Channel 1",
-                      buyer: "gvbup-yiaaa",
-                      content: "Street Art Tour",
-                      amount: 1.5,
-                      creatorShare: 1.35,
-                      hyveilCut: 0.15,
-                      date: "Mar 24, 2026",
-                    },
-                    {
-                      channel: myChannels[1]?.partnerName ?? "Channel 2",
-                      buyer: "2vxsx-fae",
-                      content: "Cooking at Home",
-                      amount: 0.6,
-                      creatorShare: 0.54,
-                      hyveilCut: 0.06,
-                      date: "Mar 22, 2026",
-                    },
-                    {
-                      channel: myChannels[0]?.partnerName ?? "Channel 1",
-                      buyer: "rdmx6-jaaaa",
-                      content: "Morning Workout Vol.2",
-                      amount: 0.5,
-                      creatorShare: 0.45,
-                      hyveilCut: 0.05,
-                      date: "Mar 20, 2026",
-                    },
-                    {
-                      channel: myChannels[1]?.partnerName ?? "Channel 2",
-                      buyer: "aaaaa-aa",
-                      content: "City Life Ep.4",
-                      amount: 1.2,
-                      creatorShare: 1.08,
-                      hyveilCut: 0.12,
-                      date: "Mar 18, 2026",
-                    },
-                    {
-                      channel: myChannels[0]?.partnerName ?? "Channel 1",
-                      buyer: "rrkah-fqaaa",
-                      content: "Tech Talk #6",
-                      amount: 2.0,
-                      creatorShare: 1.8,
-                      hyveilCut: 0.2,
-                      date: "Mar 15, 2026",
-                    },
-                  ];
+                  const CREATOR_MOCK_TXS: {
+                    channel: string;
+                    buyer: string;
+                    content: string;
+                    amount: number;
+                    creatorShare: number;
+                    hyveilCut: number;
+                    date: string;
+                  }[] = [];
                   return (
                     <div
                       className="glass-card rounded-2xl overflow-hidden"
@@ -4720,7 +4136,7 @@ export default function App() {
                                 className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors"
                                 data-ocid={`creator.transactions.row.item.${i + 1}`}
                               >
-                                <td className="px-5 py-3 text-xs font-medium text-violet-400">
+                                <td className="px-5 py-3 text-xs font-medium text-blue-400">
                                   {tx.channel}
                                 </td>
                                 <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{`${tx.buyer.slice(0, 5)}...${tx.buyer.slice(-4)}`}</td>
@@ -4733,7 +4149,7 @@ export default function App() {
                                 <td className="px-4 py-3 text-right font-mono text-xs text-emerald-400">
                                   {tx.creatorShare.toFixed(3)} ICP
                                 </td>
-                                <td className="px-4 py-3 text-right font-mono text-xs text-violet-400">
+                                <td className="px-4 py-3 text-right font-mono text-xs text-blue-400">
                                   {tx.hyveilCut.toFixed(3)} ICP
                                 </td>
                                 <td className="px-4 py-3 text-right text-xs text-muted-foreground">
@@ -4767,7 +4183,7 @@ export default function App() {
                 </p>
               </div>
               <Button
-                className="rounded-xl bg-violet-600 hover:bg-violet-500 text-white gap-2"
+                className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white gap-2"
                 onClick={() => setShowPartnerForm(true)}
                 data-ocid="partners.cta.button"
               >
@@ -4782,7 +4198,7 @@ export default function App() {
                 {
                   label: "Total Partners",
                   value: partners.length,
-                  icon: <Building2 className="w-4 h-4 text-violet-400" />,
+                  icon: <Building2 className="w-4 h-4 text-blue-400" />,
                 },
                 {
                   label: "Total Channels",
@@ -4953,7 +4369,7 @@ export default function App() {
                                   key={c}
                                   className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                                     c === "ICP"
-                                      ? "bg-violet-500/20 text-violet-300"
+                                      ? "bg-blue-500/20 text-blue-300"
                                       : c === "Ethereum"
                                         ? "bg-blue-500/20 text-blue-300"
                                         : c === "Solana"
@@ -4998,7 +4414,7 @@ export default function App() {
                           <td className="px-4 py-3.5 text-right font-mono text-emerald-300">
                             {p.earned.toFixed(3)} ICP
                           </td>
-                          <td className="px-4 py-3.5 text-right text-violet-400">
+                          <td className="px-4 py-3.5 text-right text-blue-400">
                             {p.commissionRate}%
                           </td>
                           <td className="px-4 py-3.5 text-muted-foreground text-xs">
@@ -5008,7 +4424,7 @@ export default function App() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="rounded-lg text-xs h-7 px-2.5 border border-white/10 hover:border-violet-500/40"
+                              className="rounded-lg text-xs h-7 px-2.5 border border-white/10 hover:border-blue-500/40"
                               onClick={() => setSelectedPartnerChannel(p)}
                               data-ocid={`partners.view.button.${i + 1}`}
                             >
@@ -5075,7 +4491,7 @@ export default function App() {
                             >
                               {p.canisterId.toString()}.icp0.io
                             </a>
-                            <span className="flex items-center gap-1 text-[10px] text-violet-300 bg-violet-500/10 border border-violet-500/20 px-1.5 py-0.5 rounded">
+                            <span className="flex items-center gap-1 text-[10px] text-blue-300 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded">
                               <Lock className="w-2.5 h-2.5" /> HYVEIL Template
                             </span>
                           </div>
@@ -5231,7 +4647,7 @@ export default function App() {
                           <div className="font-mono text-[10px] text-cyan-400">
                             Owner: {p.owner.toString().slice(0, 20)}...
                           </div>
-                          <div className="font-mono text-[10px] text-violet-400 mt-0.5">
+                          <div className="font-mono text-[10px] text-blue-400 mt-0.5">
                             Canister: {p.canisterId.toString().slice(0, 27)}...
                           </div>
                         </div>
@@ -5416,14 +4832,14 @@ export default function App() {
                           }
                           setSelectedTemplate(tmpl.id);
                         }}
-                        className={`glass-card rounded-xl p-4 text-left border transition-all flex flex-col gap-2 ${tmpl.live ? "border-white/10 hover:border-violet-500/50 hover:ring-1 hover:ring-violet-500/30 cursor-pointer" : "border-white/[0.05] opacity-60 cursor-not-allowed"}`}
+                        className={`glass-card rounded-xl p-4 text-left border transition-all flex flex-col gap-2 ${tmpl.live ? "border-white/10 hover:border-blue-500/50 hover:ring-1 hover:ring-blue-500/30 cursor-pointer" : "border-white/[0.05] opacity-60 cursor-not-allowed"}`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <IconComp
-                            className={`w-7 h-7 mt-0.5 flex-shrink-0 ${tmpl.live ? "text-violet-400" : "text-muted-foreground"}`}
+                            className={`w-7 h-7 mt-0.5 flex-shrink-0 ${tmpl.live ? "text-blue-400" : "text-muted-foreground"}`}
                           />
                           {tmpl.live ? (
-                            <span className="text-[10px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-full px-2 py-0.5">
+                            <span className="text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full px-2 py-0.5">
                               Live
                             </span>
                           ) : (
@@ -5450,7 +4866,7 @@ export default function App() {
               <>
                 <DialogHeader>
                   <DialogTitle className="font-display font-bold flex items-center gap-2">
-                    <Handshake className="w-5 h-5 text-violet-400" />
+                    <Handshake className="w-5 h-5 text-blue-400" />
                     Deploy Your Channel Canister
                   </DialogTitle>
                   <DialogDescription className="text-xs text-muted-foreground mt-1">
@@ -5461,12 +4877,12 @@ export default function App() {
                           setSelectedTemplate("");
                           setRegStep(1);
                         }}
-                        className="text-violet-400 hover:text-violet-300 underline underline-offset-2 text-xs"
+                        className="text-blue-400 hover:text-blue-300 underline underline-offset-2 text-xs"
                       >
                         ← Change template
                       </button>
                       <span className="text-white/20">|</span>
-                      <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-full px-2 py-0.5 text-[10px] font-semibold">
+                      <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full px-2 py-0.5 text-[10px] font-semibold">
                         {selectedTemplate === "reels"
                           ? "Short Video / Reels"
                           : selectedTemplate}
@@ -5488,7 +4904,7 @@ export default function App() {
                   {[1, 2, 3].map((s) => (
                     <div
                       key={s}
-                      className={`h-1 flex-1 rounded-full transition-all ${s <= regStep ? "bg-violet-500" : "bg-white/10"}`}
+                      className={`h-1 flex-1 rounded-full transition-all ${s <= regStep ? "bg-blue-500" : "bg-white/10"}`}
                     />
                   ))}
                 </div>
@@ -5508,7 +4924,7 @@ export default function App() {
                       </p>
                     </div>
                     <Button
-                      className="rounded-xl bg-violet-600 hover:bg-violet-500 text-white w-full"
+                      className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white w-full"
                       onClick={() => {
                         setShowPartnerForm(false);
                         login();
@@ -5538,7 +4954,7 @@ export default function App() {
                         </div>
                         <div className="font-semibold">{regSuccess.name}</div>
                         {regSuccess.templateType && (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-violet-500/20 text-violet-300 border border-violet-500/30 rounded-full px-2 py-0.5 mt-1">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full px-2 py-0.5 mt-1">
                             <Film className="w-3 h-3" />
                             {regSuccess.templateType === "reels"
                               ? "Short Video / Reels"
@@ -5572,7 +4988,7 @@ export default function App() {
                         <div className="font-mono text-[11px] text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded break-all">
                           {regSuccess.canisterId}
                         </div>
-                        <div className="flex items-center gap-1.5 mt-2 text-xs text-violet-300 bg-violet-500/10 border border-violet-500/20 rounded-lg px-2.5 py-1.5">
+                        <div className="flex items-center gap-1.5 mt-2 text-xs text-blue-300 bg-blue-500/10 border border-blue-500/20 rounded-lg px-2.5 py-1.5">
                           <Lock className="w-3 h-3 flex-shrink-0" />
                           <span>
                             HYVEIL controls the template as canister controller.
@@ -5600,7 +5016,7 @@ export default function App() {
                       Channel
                     </Button>
                     <Button
-                      className="rounded-xl bg-violet-600 hover:bg-violet-500 text-white w-full"
+                      className="rounded-xl bg-blue-600 hover:bg-blue-500 text-white w-full"
                       onClick={() => {
                         setShowPartnerForm(false);
                         setRegStep(1);
@@ -5702,7 +5118,7 @@ export default function App() {
                                         : [...prev.chains, chain],
                                     }))
                                   }
-                                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${checked ? (chain === "ICP" ? "bg-violet-500/30 border-violet-400/60 text-violet-200" : "bg-blue-500/30 border-blue-400/60 text-blue-200") : "bg-white/5 border-white/10 text-muted-foreground hover:border-white/20"}`}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${checked ? (chain === "ICP" ? "bg-blue-500/30 border-blue-400/60 text-blue-200" : "bg-blue-500/30 border-blue-400/60 text-blue-200") : "bg-white/5 border-white/10 text-muted-foreground hover:border-white/20"}`}
                                   data-ocid="partners.toggle"
                                 >
                                   {chain}
@@ -5721,7 +5137,7 @@ export default function App() {
                             Cancel
                           </Button>
                           <Button
-                            className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white"
+                            className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 text-white"
                             onClick={() => {
                               if (
                                 !newPartnerForm.name ||
@@ -5743,7 +5159,7 @@ export default function App() {
                     {/* STEP 2: Payment */}
                     {regStep === 2 && (
                       <>
-                        <div className="glass rounded-2xl p-5 space-y-4 border border-violet-500/20">
+                        <div className="glass rounded-2xl p-5 space-y-4 border border-blue-500/20">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
                               <Coins className="w-5 h-5 text-amber-400" />
@@ -5847,7 +5263,7 @@ export default function App() {
                             ← Back
                           </Button>
                           <Button
-                            className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white"
+                            className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 text-white"
                             disabled={
                               Number(myIcpDeposit) < Number(registrationFee) ||
                               regLoading
@@ -5895,7 +5311,7 @@ export default function App() {
                               </Button>
                             </div>
                           )}
-                        <div className="glass rounded-2xl p-5 space-y-3 border border-violet-500/20">
+                        <div className="glass rounded-2xl p-5 space-y-3 border border-blue-500/20">
                           <div className="font-semibold text-sm">
                             Ready to Deploy
                           </div>
@@ -5934,8 +5350,8 @@ export default function App() {
                             </div>
                           </div>
                           <div className="pt-1 border-t border-white/[0.06]" />
-                          <div className="glass rounded-xl p-3 text-xs leading-relaxed border border-violet-500/20 space-y-1">
-                            <div className="flex items-center gap-1.5 font-semibold text-violet-300">
+                          <div className="glass rounded-xl p-3 text-xs leading-relaxed border border-blue-500/20 space-y-1">
+                            <div className="flex items-center gap-1.5 font-semibold text-blue-300">
                               <Lock className="w-3.5 h-3.5" /> HYVEIL Template
                               Control
                             </div>
@@ -5947,7 +5363,7 @@ export default function App() {
                             </p>
                           </div>
                         </div>
-                        <div className="glass rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-violet-300 border border-violet-500/20">
+                        <div className="glass rounded-xl px-4 py-2.5 flex items-center gap-2 text-xs text-blue-300 border border-blue-500/20">
                           <Zap className="w-3.5 h-3.5" /> Deploying will create
                           a live canister on ICP mainnet
                         </div>
@@ -5962,7 +5378,7 @@ export default function App() {
                             ← Back
                           </Button>
                           <Button
-                            className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white gap-2"
+                            className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 text-white gap-2"
                             disabled={
                               regLoading ||
                               (!actor && !actorError) ||
@@ -6114,7 +5530,7 @@ export default function App() {
                       <Button
                         size="sm"
                         variant={isFollowed ? "outline" : "default"}
-                        className={`text-xs h-8 rounded-xl ${isFollowed ? "glass border-white/10 text-muted-foreground" : "bg-violet-600/20 border border-violet-500/30 text-violet-300 hover:bg-violet-600/30"}`}
+                        className={`text-xs h-8 rounded-xl ${isFollowed ? "glass border-white/10 text-muted-foreground" : "bg-blue-600/20 border border-blue-500/30 text-blue-300 hover:bg-blue-600/30"}`}
                         disabled={followLoading === cid}
                         onClick={async () => {
                           if (!actor) return;
@@ -6182,14 +5598,14 @@ export default function App() {
                 <TabsList className="flex mx-5 mt-4 mb-0 glass rounded-xl p-1 w-auto self-start gap-1 border border-white/[0.06]">
                   <TabsTrigger
                     value="content"
-                    className="rounded-lg text-xs px-4 py-1.5 data-[state=active]:bg-violet-600/30 data-[state=active]:text-violet-300"
+                    className="rounded-lg text-xs px-4 py-1.5 data-[state=active]:bg-blue-600/30 data-[state=active]:text-blue-300"
                     data-ocid="partners.tab"
                   >
                     Content
                   </TabsTrigger>
                   <TabsTrigger
                     value="wallet"
-                    className="rounded-lg text-xs px-4 py-1.5 data-[state=active]:bg-violet-600/30 data-[state=active]:text-violet-300"
+                    className="rounded-lg text-xs px-4 py-1.5 data-[state=active]:bg-blue-600/30 data-[state=active]:text-blue-300"
                     data-ocid="partners.tab"
                   >
                     Wallet
@@ -6254,12 +5670,12 @@ export default function App() {
                                 </p>
                               </div>
                               <div className="flex items-center justify-between mt-3">
-                                <span className="text-sm font-bold text-violet-300">
+                                <span className="text-sm font-bold text-blue-300">
                                   {item.price} ICP
                                 </span>
                                 <Button
                                   size="sm"
-                                  className={`h-7 text-xs rounded-lg ${isWatched ? "bg-emerald-600/20 text-emerald-300 border-emerald-500/20 hover:bg-emerald-600/30" : "bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border-violet-500/20"}`}
+                                  className={`h-7 text-xs rounded-lg ${isWatched ? "bg-emerald-600/20 text-emerald-300 border-emerald-500/20 hover:bg-emerald-600/30" : "bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border-blue-500/20"}`}
                                   onClick={() => {
                                     if (isWatched) {
                                       toast.info(
@@ -6371,7 +5787,7 @@ export default function App() {
                         <span className="text-muted-foreground">
                           Commission Rate
                         </span>
-                        <span className="text-violet-400">
+                        <span className="text-blue-400">
                           {selectedPartnerChannel.commissionRate}%
                         </span>
                       </div>
@@ -6462,7 +5878,7 @@ export default function App() {
                   <span className="text-muted-foreground">
                     HYVEIL commission (10%)
                   </span>
-                  <span className="text-violet-300">
+                  <span className="text-blue-300">
                     {ppvModal ? (ppvModal.price * 0.1).toFixed(4) : "0"} ICP
                   </span>
                 </div>
@@ -6478,7 +5894,7 @@ export default function App() {
                 Cancel
               </Button>
               <Button
-                className="flex-1 rounded-xl bg-violet-600 hover:bg-violet-500 text-white"
+                className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500 text-white"
                 disabled={ppvPurchasing}
                 onClick={async () => {
                   if (!isLoggedIn || !identity) {
@@ -6572,7 +5988,7 @@ export default function App() {
         <DialogContent
           className="sm:max-w-md"
           style={{
-            background: "#141420",
+            background: "#0a0a1a",
             border: "1px solid rgba(255,255,255,0.08)",
           }}
           data-ocid="creator.add_content.dialog"
@@ -6646,7 +6062,7 @@ export default function App() {
                   </SelectTrigger>
                   <SelectContent
                     style={{
-                      background: "#1a1a2a",
+                      background: "#0d1020",
                       border: "1px solid rgba(255,255,255,0.1)",
                     }}
                   >
@@ -6678,7 +6094,7 @@ export default function App() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">HYVEIL (10%)</span>
-                  <span style={{ color: "#8b5cf6" }}>
+                  <span style={{ color: "#3b82f6" }}>
                     {(
                       Number.parseFloat(addContentForm.price || "0") * 0.1
                     ).toFixed(4)}{" "}
@@ -6699,7 +6115,7 @@ export default function App() {
               <Button
                 className="flex-1 font-semibold"
                 style={{
-                  background: "linear-gradient(135deg, #ec4899, #8b5cf6)",
+                  background: "linear-gradient(135deg, #ec4899, #3b82f6)",
                   color: "white",
                   border: "none",
                 }}

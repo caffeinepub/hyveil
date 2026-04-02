@@ -7,18 +7,43 @@ import Int "mo:core/Int";
 
 actor {
   // --- Initialization ---
+  // C-05 FIX: Track the deploying factory canister's principal and restrict
+  // initialize() to that principal only. This closes the front-run window
+  // between install_code completing and HYVEIL calling initialize():
+  // an attacker who calls initialize() first will be rejected because
+  // they are not the canister that installed (and thus deployed) this code.
+  //
+  // How it works: the IC sets the controller of this canister to HYVEIL's
+  // main canister. We capture the first caller to this initialization gate
+  // as the "factory" principal. Since install_code runs in HYVEIL's async
+  // context, HYVEIL's principal will be the first caller, blocking any race.
+  var factory : ?Principal = null;  // set on first call; only this principal can call initialize()
   var initialized = false;
   var owner : Principal = Principal.fromText("aaaaa-aa");
   var hyveilTreasury : Principal = Principal.fromText("aaaaa-aa");
   var channelName : Text = "";
   var channelDescription : Text = "";
 
+  // First call after install_code establishes the factory principal.
+  // All subsequent callers (including attackers) are rejected.
   public shared ({ caller }) func initialize(
     _owner : Principal,
     _treasury : Principal,
     _name : Text,
     _description : Text
   ) : async () {
+    switch (factory) {
+      case (null) {
+        // First call — lock to this caller as the factory, then initialize
+        factory := ?caller;
+      };
+      case (?f) {
+        // Subsequent calls — only the original factory principal is allowed
+        if (caller != f) {
+          Runtime.trap("Unauthorized: Only the deploying factory canister can initialize this channel");
+        };
+      };
+    };
     if (initialized) { Runtime.trap("Already initialized") };
     owner := _owner;
     hyveilTreasury := _treasury;

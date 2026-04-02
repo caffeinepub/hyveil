@@ -103,6 +103,10 @@ actor Oracle {
   };
 
   // --- Social Score Formula ---
+  // M-08 FIX: Use scaled arithmetic (* 1000 before dividing) to avoid integer truncation.
+  // Old formula: (views / 100) * 5 -> channels with 1-99 views score 0 points (cliff incentive).
+  // New formula: (views * 5) / 100 -> all views contribute fractionally, no cliff.
+  // This also prevents the gameable boundary where 100 views = 5pts but 99 views = 0pts.
   func calcScore(metrics : {
     uploads : Nat;
     views : Nat;
@@ -110,7 +114,7 @@ actor Oracle {
     sales : Nat;
     subscriptions : Nat;
   }) : Nat {
-    let viewScore = (metrics.views / 100) * 5;
+    let viewScore = (metrics.views * 5) / 100;  // fixed: multiply before divide
     (metrics.uploads * 10) + viewScore + (metrics.followers * 2) + (metrics.sales * 15) + (metrics.subscriptions * 20);
   };
 

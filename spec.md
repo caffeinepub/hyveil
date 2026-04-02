@@ -1,29 +1,35 @@
 # HYVEIL
 
 ## Current State
-Four backend canisters: main.mo (hub), channel.mo (partner template), token.mo (HYV ICRC-2), oracle.mo (social mining). All previously identified build bugs are fixed. Core flows: partner channel deployment via canister factory, 90/10 revenue split, HYV social mining, CMC integration, auto-refill.
+The Privacy Layer tab (`activeTab === "proxy"`) currently contains:
+1. A live proxy status bar
+2. A grid of "proxy service" cards (IC-Netflix, IC-Social, IC-Reddit, IC-GitHub, IC-Medium) — these are the "installed links" with Activate/Deactivate buttons
+3. A "Browsing History" panel (`proxyLog`) that shows past proxy requests with URL, status code, timestamp, source tag
+4. A "Dub Agent" section with language/subtitle settings
+
+The `proxyServices` state (`INITIAL_PROXY_SERVICES`) drives the installed-links grid. The `proxyLog` state drives the browsing history.
 
 ## Requested Changes (Diff)
 
 ### Add
-- `main.mo`: real ICP `icrc2_transfer_from` payment inside `purchaseContent` before recording purchase
-- `main.mo`: `withdrawEarnings(amount)` — creator withdraws accumulated ICP earnings to their wallet via `icrc1_transfer`
-- `main.mo`: `hasPurchased(contentId)` query — prevents duplicate purchases
-- `main.mo`: `icrc1_transfer` to the ICP ledger actor definition
-- `main.mo`: per-user likeVideo deduplication using a `videoLikes` map
-- `channel.mo`: `followTimestamps` map + 1-hour cooldown on `follow()` and `unfollow()`
+- Proxy History panel as the primary, prominent content of the Privacy Layer section — expanded, polished, and the focal point of the page
+- Enhanced empty state for the proxy history (when no entries yet)
+- A URL/request detail row showing method, status code, timestamp, source badge, and body preview
 
 ### Modify
-- `channel.mo` `recordPurchase`: restrict caller to `hyveilTreasury` only — remove owner access entirely
-- `main.mo` `purchaseContent`: pull real ICP from buyer before recording; credit creator share to `icpBalances`; check for duplicate purchase
-- `main.mo` `likeVideo`: check `videoLikes` map before incrementing; record liker to prevent double-likes
-- `oracle.mo` `registerChannel`: remove `case (null) {}` bypass — trap if admin is not set
+- The Proxy History section should be promoted to be the main content area (larger, full-width, no max-height truncation — or with a taller scrollable area)
+- The live proxy status bar at the top can stay
+- The Dub Agent section can stay
 
 ### Remove
-- Nothing removed
+- The entire "Proxy services" grid (the cards for IC-Netflix, IC-Social, IC-Reddit, IC-GitHub, IC-Medium)
+- `INITIAL_PROXY_SERVICES` array and all code that references it: `proxyServices` state, `proxyLoadingId` state, `handleActivateProxy` function, the grid rendering block
+- The `ProxyService` interface (if only used by the removed code)
 
 ## Implementation Plan
-1. `channel.mo`: restrict `recordPurchase` to hyveilTreasury; add follow rate-limiting with 1-hour cooldown
-2. `main.mo`: add `icrc1_transfer` to ledger interface; fix `purchaseContent` with real payment + duplicate check + creator credit; add `withdrawEarnings`; add `hasPurchased` query; add likeVideo dedup
-3. `oracle.mo`: fix `registerChannel` null bypass
-4. Frontend: update purchase UI (approve step, already-purchased state), add withdraw earnings to creator dashboard
+1. Remove `INITIAL_PROXY_SERVICES` constant and `ProxyService` interface
+2. Remove `proxyServices`, `proxyLoadingId` state declarations
+3. Remove `handleActivateProxy` callback
+4. In the proxy tab JSX: delete the proxy services grid section entirely
+5. Promote the Browsing History panel — remove `max-h-80`, increase height or use `max-h-[60vh]`, add richer styling to each entry
+6. Keep the proxy status bar and Dub Agent sections intact
