@@ -171,6 +171,7 @@ export interface backendInterface {
     hasPurchased(contentId: string): Promise<boolean>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
     withdrawEarnings(amount: bigint): Promise<void>;
+    icrc1_fee(): Promise<bigint>;
     notifyTopUp(blockIndex: bigint): Promise<bigint>;
     getIcpXdrConversionRate(): Promise<IcpXdrRate>;
     getCachedIcpXdrRate(): Promise<IcpXdrRate>;

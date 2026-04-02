@@ -9,23 +9,14 @@ actor {
   // --- Initialization ---
   // C-05 FIX: Track the deploying factory canister's principal and restrict
   // initialize() to that principal only. This closes the front-run window
-  // between install_code completing and HYVEIL calling initialize():
-  // an attacker who calls initialize() first will be rejected because
-  // they are not the canister that installed (and thus deployed) this code.
-  //
-  // How it works: the IC sets the controller of this canister to HYVEIL's
-  // main canister. We capture the first caller to this initialization gate
-  // as the "factory" principal. Since install_code runs in HYVEIL's async
-  // context, HYVEIL's principal will be the first caller, blocking any race.
-  var factory : ?Principal = null;  // set on first call; only this principal can call initialize()
+  // between install_code completing and HYVEIL calling initialize().
+  var factory : ?Principal = null;
   var initialized = false;
   var owner : Principal = Principal.fromText("aaaaa-aa");
   var hyveilTreasury : Principal = Principal.fromText("aaaaa-aa");
   var channelName : Text = "";
   var channelDescription : Text = "";
 
-  // First call after install_code establishes the factory principal.
-  // All subsequent callers (including attackers) are rejected.
   public shared ({ caller }) func initialize(
     _owner : Principal,
     _treasury : Principal,
@@ -34,11 +25,9 @@ actor {
   ) : async () {
     switch (factory) {
       case (null) {
-        // First call — lock to this caller as the factory, then initialize
         factory := ?caller;
       };
       case (?f) {
-        // Subsequent calls — only the original factory principal is allowed
         if (caller != f) {
           Runtime.trap("Unauthorized: Only the deploying factory canister can initialize this channel");
         };
@@ -123,8 +112,6 @@ actor {
 
   // --- Purchase & Revenue (90/10 split) ---
   // SECURITY: Only hyveilTreasury (HYVEIL's main canister) may call recordPurchase.
-  // This prevents channel owners from fabricating fake transactions to inflate
-  // their revenue stats and social mining (HYV) score.
   public type PurchaseRecord = {
     id : Nat;
     buyer : Principal;
@@ -143,10 +130,8 @@ actor {
     contentId : Nat,
     amountE8s : Nat
   ) : async () {
-    // Only HYVEIL's main canister (hyveilTreasury) may record purchases.
-    // Removing owner access closes the fake-transaction exploit.
     if (caller != hyveilTreasury) {
-      Runtime.trap("Unauthorized: Only HYVEIL can record purchases. Partners cannot self-report transactions.");
+      Runtime.trap("Unauthorized: Only HYVEIL can record purchases.");
     };
     let hyveilShare = amountE8s / 10;
     let creatorShare = amountE8s - hyveilShare;
@@ -201,15 +186,14 @@ actor {
   };
 
   // --- Follower System ---
-  // SECURITY: Follow/unfollow rate-limited to 1 action per hour per principal.
-  // Prevents bot farms from artificially inflating follower counts which
-  // feed into the HYV social mining oracle score (2 pts per follower).
+  // SECURITY: Rate-limited to 1 follow/unfollow per hour per principal.
   let followers = Map.empty<Principal, Bool>();
   let followTimestamps = Map.empty<Principal, Int>();
-  let FOLLOW_COOLDOWN : Int = 3_600_000_000_000; // 1 hour in nanoseconds
+  let FOLLOW_COOLDOWN : Int = 3_600_000_000_000;
 
   public shared ({ caller }) func follow() : async () {
-    if (Principal.isAnonymous(caller)) { Runtime.trap("Must be authenticated to follow") };
+    // FIX: use caller.isAnonymous() — correct Motoko 1.2 syntax
+    if (caller.isAnonymous()) { Runtime.trap("Must be authenticated to follow") };
     let now = Time.now();
     switch (followTimestamps.get(caller)) {
       case (?lastTime) {
@@ -224,7 +208,8 @@ actor {
   };
 
   public shared ({ caller }) func unfollow() : async () {
-    if (Principal.isAnonymous(caller)) { Runtime.trap("Must be authenticated to unfollow") };
+    // FIX: use caller.isAnonymous() — correct Motoko 1.2 syntax
+    if (caller.isAnonymous()) { Runtime.trap("Must be authenticated to unfollow") };
     let now = Time.now();
     switch (followTimestamps.get(caller)) {
       case (?lastTime) {
@@ -342,8 +327,7 @@ actor {
       if (p.amountE8s > 0) { sales += 1 };
     };
     {
-      // H-07 fix: only count active (non-deactivated) content to prevent score inflation
-      // from repeatedly adding/removing content items.
+      // H-07 fix: only count active content to prevent score inflation
       uploads = contentItems.values().filter(func(i : ContentItem) : Bool { i.isActive }).toArray().size();
       views = totalViews;
       followers = followers.size();

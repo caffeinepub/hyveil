@@ -96,10 +96,16 @@ actor Main {
           let status = await ic.canister_status({ canister_id = oId });
           lastOracleCyclesChecked := status.cycles;
           if (status.cycles < REFILL_THRESHOLD) {
-            let topUpAmount = REFILL_TARGET - status.cycles;
-            await (with cycles = topUpAmount) ic.deposit_cycles({ canister_id = oId });
-            autoRefillCount += 1;
-            lastAutoRefillTime := Time.now();
+            // Saturating subtraction guards against Nat underflow trap
+            let topUpAmount = if (REFILL_TARGET > status.cycles) { REFILL_TARGET - status.cycles } else { 0 };
+            // FIX C-03: Guard — only refill if HYVEIL has enough cycles to cover the top-up.
+            // Without this, deposit_cycles would silently fail (or trap) when HYVEIL is drained,
+            // while still marking the refill as successful.
+            if (topUpAmount > 0 and Cycles.balance() > topUpAmount + 100_000_000_000) {
+              await (with cycles = topUpAmount) ic.deposit_cycles({ canister_id = oId });
+              autoRefillCount += 1;
+              lastAutoRefillTime := Time.now();
+            };
           };
         } catch (_) {};
       };
@@ -111,10 +117,13 @@ actor Main {
           let status = await ic.canister_status({ canister_id = tId });
           lastTokenCyclesChecked := status.cycles;
           if (status.cycles < REFILL_THRESHOLD) {
-            let topUpAmount = REFILL_TARGET - status.cycles;
-            await (with cycles = topUpAmount) ic.deposit_cycles({ canister_id = tId });
-            autoRefillCount += 1;
-            lastAutoRefillTime := Time.now();
+            let topUpAmount = if (REFILL_TARGET > status.cycles) { REFILL_TARGET - status.cycles } else { 0 };
+            // Same guard for token canister refill
+            if (topUpAmount > 0 and Cycles.balance() > topUpAmount + 100_000_000_000) {
+              await (with cycles = topUpAmount) ic.deposit_cycles({ canister_id = tId });
+              autoRefillCount += 1;
+              lastAutoRefillTime := Time.now();
+            };
           };
         } catch (_) {};
       };
@@ -199,7 +208,8 @@ actor Main {
       Runtime.trap("Insufficient ICP balance. Need 1 ICP (100,000,000 e8s). Deposit ICP first.");
     };
     // C-04: Deduct ICP first; refund if the cycles deposit fails.
-    icpBalances.add(caller, currentBalance - PARTNER_TOPUP_FEE);
+    let newTopupBalance = if (currentBalance >= PARTNER_TOPUP_FEE) { currentBalance - PARTNER_TOPUP_FEE } else { 0 };
+    icpBalances.add(caller, newTopupBalance);
     let ic = actor ("aaaaa-aa") : actor {
       deposit_cycles : shared ({ canister_id : Principal }) -> async ();
     };
@@ -302,63 +312,81 @@ actor Main {
     };
     tokenSystemDeploying := true;
     let tWasm = switch (tokenWasm) {
-      case (null) { Runtime.trap("Token WASM not loaded") };
+      case (null) {
+        // Reset mutex before trapping so retries are possible
+        tokenSystemDeploying := false;
+        Runtime.trap("Token WASM not loaded");
+      };
       case (?w) { w };
     };
     let oWasm = switch (oracleWasm) {
-      case (null) { Runtime.trap("Oracle WASM not loaded") };
+      case (null) {
+        tokenSystemDeploying := false;
+        Runtime.trap("Oracle WASM not loaded");
+      };
       case (?w) { w };
     };
-    let { canister_id = newTokenId } = await (
-      with cycles = 50_000_000_000
-    ) icManagement.create_canister({
-      settings = ?{
-        controllers = ?[Principal.fromActor(Main)];
-        compute_allocation = null;
-        memory_allocation = null;
-        freezing_threshold = null;
+    // FIX C-02: Wrap all awaits so mutex is always reset on any failure.
+    // Without this, any trap between set and reset permanently locks the button.
+    let deployResult = try {
+      let { canister_id = newTokenId } = await (
+        with cycles = 50_000_000_000
+      ) icManagement.create_canister({
+        settings = ?{
+          controllers = ?[Principal.fromActor(Main)];
+          compute_allocation = null;
+          memory_allocation = null;
+          freezing_threshold = null;
+        };
+      });
+      await icManagement.install_code({
+        mode = #install;
+        canister_id = newTokenId;
+        wasm_module = tWasm;
+        arg = Blob.fromArray([]);
+      });
+      let { canister_id = newOracleId } = await (
+        with cycles = 50_000_000_000
+      ) icManagement.create_canister({
+        settings = ?{
+          controllers = ?[Principal.fromActor(Main)];
+          compute_allocation = null;
+          memory_allocation = null;
+          freezing_threshold = null;
+        };
+      });
+      await icManagement.install_code({
+        mode = #install;
+        canister_id = newOracleId;
+        wasm_module = oWasm;
+        arg = Blob.fromArray([]);
+      });
+      type TokenInitActor = actor {
+        initAdmin : () -> async ();
+        setOracle : (Principal) -> async ();
       };
-    });
-    await icManagement.install_code({
-      mode = #install;
-      canister_id = newTokenId;
-      wasm_module = tWasm;
-      arg = Blob.fromArray([]);
-    });
-    let { canister_id = newOracleId } = await (
-      with cycles = 50_000_000_000
-    ) icManagement.create_canister({
-      settings = ?{
-        controllers = ?[Principal.fromActor(Main)];
-        compute_allocation = null;
-        memory_allocation = null;
-        freezing_threshold = null;
+      type OracleInitActor = actor {
+        initAdmin : () -> async ();
+        setTokenCanister : (Principal) -> async ();
       };
-    });
-    await icManagement.install_code({
-      mode = #install;
-      canister_id = newOracleId;
-      wasm_module = oWasm;
-      arg = Blob.fromArray([]);
-    });
-    type TokenInitActor = actor {
-      initAdmin : () -> async ();
-      setOracle : (Principal) -> async ();
+      let tokenActor : TokenInitActor = actor (newTokenId.toText());
+      await tokenActor.initAdmin();
+      await tokenActor.setOracle(newOracleId);
+      let oracleActor : OracleInitActor = actor (newOracleId.toText());
+      await oracleActor.initAdmin();
+      await oracleActor.setTokenCanister(newTokenId);
+      tokenCanisterId := ?newTokenId;
+      oraclePrincipal := ?newOracleId;
+      #ok({ tokenCanisterId = newTokenId; oracleCanisterId = newOracleId });
+    } catch (e) {
+      #err(e.message());
     };
-    type OracleInitActor = actor {
-      initAdmin : () -> async ();
-      setTokenCanister : (Principal) -> async ();
-    };
-    let tokenActor : TokenInitActor = actor (newTokenId.toText());
-    await tokenActor.initAdmin();
-    await tokenActor.setOracle(newOracleId);
-    let oracleActor : OracleInitActor = actor (newOracleId.toText());
-    await oracleActor.initAdmin();
-    await oracleActor.setTokenCanister(newTokenId);
-    tokenCanisterId := ?newTokenId;
-    oraclePrincipal := ?newOracleId;
+    // Always reset mutex regardless of outcome
     tokenSystemDeploying := false;
-    { tokenCanisterId = newTokenId; oracleCanisterId = newOracleId };
+    switch (deployResult) {
+      case (#ok(result)) { result };
+      case (#err(msg)) { Runtime.trap("Token system deployment failed: " # msg) };
+    };
   };
 
   type ChannelActor = actor {
@@ -526,8 +554,9 @@ actor Main {
     if (balance < amount + fee) {
       Runtime.trap("Insufficient earnings balance. Available: " # balance.toText() # " e8s, requested: " # amount.toText() # " e8s + " # fee.toText() # " e8s fee");
     };
-    // Deduct first to prevent double-spend
-    icpBalances.add(caller, balance - amount - fee);
+    // Deduct first to prevent double-spend — saturating sub guards compiler Nat warning
+    let deductedBalance = if (balance >= amount + fee) { balance - amount - fee } else { 0 };
+    icpBalances.add(caller, deductedBalance);
     // Transfer ICP to caller's wallet via a separate actor reference
     // (icpLedger is kept to its original type for upgrade compatibility)
     let icpLedgerTransfer = actor("ryjl3-tyaaa-aaaaa-aaaba-cai") : actor {
@@ -694,6 +723,8 @@ actor Main {
     };
   };
 
+  // NOTE: Must remain `shared` (not `shared query`) because it awaits a cross-canister
+  // call to the token canister. Query functions cannot issue inter-canister calls.
   public shared func getHyvBalance(principal : Principal) : async Nat {
     switch (tokenCanisterId) {
       case (null) { 0 };
@@ -818,6 +849,10 @@ actor Main {
 
   var nextPurchaseId = 1;
   let purchases = Map.empty<Nat, PurchaseRecord>();
+  // FIX #6: O(1) duplicate-purchase index keyed by "buyerPrincipal:contentId".
+  // The old linear scan over all purchases caused O(n) cycle cost on every purchase
+  // check — a popular item with thousands of buyers would time out or hit cycle limits.
+  let purchasedIndex = Map.empty<Text, Bool>();
 
   // SECURITY FIX: purchaseContent now pulls real ICP from the buyer via icrc2_transfer_from
   // before recording the purchase. This closes the free-purchase exploit where anyone could
@@ -834,11 +869,9 @@ actor Main {
     if (content.priceE8s == 0) {
       Runtime.trap("This content is free — no purchase required");
     };
-    // Prevent duplicate purchases
-    let alreadyBought = purchases.values().filter(
-      func(p : PurchaseRecord) : Bool { p.buyer == caller and p.contentId == contentId }
-    ).toArray().size() > 0;
-    if (alreadyBought) {
+    // Prevent duplicate purchases — O(1) indexed check instead of O(n) linear scan
+    let purchaseKey = caller.toText() # ":" # contentId;
+    if (purchasedIndex.get(purchaseKey) != null) {
       Runtime.trap("You have already purchased this content");
     };
     // Pull real ICP from buyer. Buyer must have called icrc2_approve on the ICP ledger first.
@@ -875,6 +908,8 @@ actor Main {
       timestamp = Time.now();
     };
     purchases.add(purchaseId, purchase);
+    // Record in O(1) index for future duplicate checks
+    purchasedIndex.add(purchaseKey, true);
     let partner = switch (partners.get(content.partnerId)) {
       case (null) { Runtime.trap("Partner not found") };
       case (?p) { p };
@@ -891,9 +926,9 @@ actor Main {
 
   // Check if caller has already purchased a specific content item
   public query ({ caller }) func hasPurchased(contentId : Text) : async Bool {
-    purchases.values().filter(
-      func(p : PurchaseRecord) : Bool { p.buyer == caller and p.contentId == contentId }
-    ).toArray().size() > 0;
+    // FIX #6: O(1) lookup using purchasedIndex instead of O(n) scan
+    let purchaseKey = caller.toText() # ":" # contentId;
+    purchasedIndex.get(purchaseKey) != null;
   };
 
   public type RevenueStats = {
@@ -1195,7 +1230,12 @@ actor Main {
     };
   };
 
-  public query func getHyveilCyclesBalance() : async Nat {
+  // FIX: Added admin-only guard to prevent external timing attacks.
+  // Public exposure lets adversaries know exactly when the reserve is depleted.
+  public shared ({ caller }) func getHyveilCyclesBalance() : async Nat {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can view the cycles balance");
+    };
     Cycles.balance();
   };
 

@@ -435,16 +435,29 @@ export default function App() {
   // Fetch on-chain data when logged in
   useEffect(() => {
     if (!actor || !isLoggedIn) return;
-    // Attempt to claim owner/admin role if no admin has been assigned yet
-    actor.claimOwnerIfFirst().catch(() => {});
+    // Attempt to claim owner/admin role if no admin has been assigned yet.
+    // FIX #7: Log failures instead of silently swallowing them so the first-login
+    // admin can know if the claim failed (e.g., actor not ready, network error).
+    actor.claimOwnerIfFirst().catch((e) => {
+      console.warn("claimOwnerIfFirst failed:", e);
+    });
+    // FIX #7b: isCallerAdmin is separated from the main Promise.all so that
+    // a transient failure in admin check doesn't silently zero out all other state.
+    // Both fetch independently; admin defaults to false on error with a console warning.
+    actor
+      .isCallerAdmin()
+      .then(setIsAdmin)
+      .catch((e) => {
+        console.warn("isCallerAdmin failed — admin features hidden:", e);
+        setIsAdmin(false);
+      });
     Promise.all([
       actor.getRegistrationFee(),
       actor.getMyIcpBalance(),
       actor.getMyPartners(),
       actor.getPartners().catch(() => [] as PartnerRecord[]),
-      actor.isCallerAdmin().catch(() => false),
     ])
-      .then(([fee, bal, myP, allP, admin]) => {
+      .then(([fee, bal, myP, allP]) => {
         setRegistrationFee(fee);
         setMyIcpDeposit(bal);
         setMyPartners(myP);
@@ -461,8 +474,7 @@ export default function App() {
             })
             .catch(() => {});
         }
-        setIsAdmin(admin);
-        if (admin) {
+        if (isAdmin) {
           // Fetch WASM status and HYVEIL principal for admin
           (actor as any)
             .getChannelWasmStatus?.()
@@ -477,7 +489,7 @@ export default function App() {
         }
       })
       .catch(() => {});
-  }, [actor, isLoggedIn]);
+  }, [actor, isLoggedIn, isAdmin]);
 
   const refreshMyBalance = async () => {
     if (!actor) return;
@@ -5919,7 +5931,7 @@ export default function App() {
                     // Step 2: Call purchaseContent
                     setPpvPurchaseStep("purchasing");
                     toast.info("Step 2/2: Completing purchase…");
-                    await (actor as any).purchaseContent(ppvModal.id);
+                    await actor.purchaseContent(ppvModal.id);
                     setPpvWatched((prev) => new Set([...prev, ppvModal.id]));
                     const tx: Transaction = {
                       id: `ppv-${Date.now()}`,

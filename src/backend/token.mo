@@ -17,6 +17,10 @@ actor Token {
   var admin : ?Principal = null;
   var oraclePrincipal : ?Principal = null;
   var totalMinted : Nat = 0;
+  // FIX #9: Incrementing block index for ICRC-1 transfers.
+  // The old implementation returned hardcoded 0, breaking wallets/exchanges
+  // that rely on block indices for deduplication and transaction tracking.
+  var nextBlockIndex : Nat = 0;
 
   let balances = Map.empty<Principal, Nat>();
 
@@ -111,7 +115,9 @@ actor Token {
       case (?b) { b };
     };
     balances.add(args.to.owner, toBal + args.amount);
-    #Ok(0);
+    let blockIndex = nextBlockIndex;
+    nextBlockIndex += 1;
+    #Ok(blockIndex);
   };
 
   // Simple transfer convenience method
@@ -235,7 +241,9 @@ actor Token {
       case (?b) { b };
     };
     balances.add(args.to.owner, toBal + args.amount);
-    #Ok(0);
+    let blockIndex = nextBlockIndex;
+    nextBlockIndex += 1;
+    #Ok(blockIndex);
   };
 
   public query func getAllowance(owner : Principal, spender : Principal) : async Nat {
@@ -251,6 +259,11 @@ actor Token {
       };
     };
   };
+
+  // FIX #9c: icrc1_fee is required by the ICRC-1 standard.
+  // Wallets and exchanges call this to determine the fee before sending a transfer.
+  // HYV has no transfer fee (fee = 0) — minting costs are borne by the oracle.
+  public query func icrc1_fee() : async Nat { 0 };
 
   // --- Stats ---
   public query func getMiningStats() : async {

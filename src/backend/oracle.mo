@@ -2,7 +2,6 @@ import Map "mo:core/Map";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Nat "mo:core/Nat";
-import Time "mo:core/Time";
 import Timer "mo:core/Timer";
 
 /// HYV Mining Oracle — Proof of Social Work
@@ -62,8 +61,7 @@ actor Oracle {
   };
 
   // --- Channel Registry ---
-  // SECURITY: Removed the `case (null) {}` bypass that allowed anyone to register
-  // channels before initAdmin() was called. Now always requires admin authorization.
+  // SECURITY: Always requires admin authorization — no null bypass allowed.
   public shared ({ caller }) func registerChannel(channelId : Principal, ownerPrincipal : Principal) : async () {
     switch (admin) {
       case (null) {
@@ -83,8 +81,7 @@ actor Oracle {
     ignore channelRegistry.remove(channelId);
   };
 
-  // H-10 fix: restricted to admin-only. Public access would expose the
-  // (channelId → ownerPrincipal) graph, deanonymizing all creator identities.
+  // H-10 fix: restricted to admin-only.
   public shared ({ caller }) func getRegisteredChannels() : async [(Principal, Principal)] {
     requireAdmin(caller);
     channelRegistry.entries().toArray();
@@ -103,10 +100,7 @@ actor Oracle {
   };
 
   // --- Social Score Formula ---
-  // M-08 FIX: Use scaled arithmetic (* 1000 before dividing) to avoid integer truncation.
-  // Old formula: (views / 100) * 5 -> channels with 1-99 views score 0 points (cliff incentive).
-  // New formula: (views * 5) / 100 -> all views contribute fractionally, no cliff.
-  // This also prevents the gameable boundary where 100 views = 5pts but 99 views = 0pts.
+  // M-08 FIX: multiply before divide to avoid integer truncation cliff.
   func calcScore(metrics : {
     uploads : Nat;
     views : Nat;
@@ -114,17 +108,14 @@ actor Oracle {
     sales : Nat;
     subscriptions : Nat;
   }) : Nat {
-    let viewScore = (metrics.views * 5) / 100;  // fixed: multiply before divide
+    let viewScore = (metrics.views * 5) / 100;
     (metrics.uploads * 10) + viewScore + (metrics.followers * 2) + (metrics.sales * 15) + (metrics.subscriptions * 20);
   };
 
   // --- Oracle Cycle ---
-  // SECURITY FIX C-01: Always require admin auth — removed the `case (null) {}` bypass.
-  // SECURITY FIX C-06: Mutex guard (oracleCycleRunning) prevents two concurrent invocations
-  // from both passing the hard-cap check before either writes totalMintedByOracle, which
-  // would allow minting 2× the intended daily pool and exceeding the 21M cap.
+  // SECURITY FIX C-01: Always require admin — no bypass when admin is null.
+  // SECURITY FIX C-06: Mutex guard prevents concurrent invocations exceeding hard cap.
   public shared ({ caller }) func runOracleCycle() : async Text {
-    // C-01: Always require admin — no bypass when admin is null
     switch (admin) {
       case (null) {
         Runtime.trap("Oracle not initialized. Call initAdmin first.");
@@ -136,13 +127,18 @@ actor Oracle {
       };
     };
 
-    // C-06: Prevent concurrent oracle cycles from racing past hard cap
     if (oracleCycleRunning) {
       return "Oracle cycle already in progress. Try again later.";
     };
     oracleCycleRunning := true;
 
-    let result = await runOracleCycleInternal();
+    // FIX #5: Mutex always reset even if runOracleCycleInternal traps.
+    let result = try {
+      await runOracleCycleInternal();
+    } catch (e) {
+      oracleCycleRunning := false;
+      return "Oracle cycle failed: " # e.message();
+    };
     oracleCycleRunning := false;
     result;
   };
@@ -163,12 +159,14 @@ actor Oracle {
       return "No channels registered";
     };
 
+    // FIX: use dot notation .toText() as required by Motoko 1.2
     let tokenActor : TokenActor = actor (tokenId.toText());
     var totalScore : Nat = 0;
     let scores = Map.empty<Principal, Nat>();
 
     for ((channelId, ownerPrincipal) in channels.vals()) {
       try {
+        // FIX: use dot notation .toText() as required by Motoko 1.2
         let channelActor : ChannelActor = actor (channelId.toText());
         let metrics = await channelActor.getSocialMetrics();
         let score = calcScore(metrics);
@@ -178,7 +176,7 @@ actor Oracle {
         };
         scores.add(ownerPrincipal, existing + score);
         totalScore += score;
-      } catch (e) {};
+      } catch (_e) {};
     };
 
     if (totalScore == 0) {
@@ -186,7 +184,7 @@ actor Oracle {
       return "No social activity recorded";
     };
 
-    // C-06: Re-check hard cap after awaits (other interleaved calls may have advanced it)
+    // C-06: Re-check hard cap after awaits
     let remainingCap = if (totalMintedByOracle >= HARD_CAP) { 0 } else { HARD_CAP - totalMintedByOracle };
     let actualMint = Nat.min(dailyMint, remainingCap);
     if (actualMint == 0) { return "Hard cap reached after awaits" };
@@ -204,13 +202,14 @@ actor Oracle {
           };
           creatorHyvMined.add(ownerPrincipal, prev + share);
           distributed += share;
-        } catch (e) {};
+        } catch (_e) {};
       };
     };
 
     totalMintedByOracle += distributed;
     totalOracleCycles += 1;
 
+    // FIX: use .toText() dot notation throughout
     "Oracle cycle " # totalOracleCycles.toText() # " complete. Distributed: " # distributed.toText() # " e8s to " # scores.size().toText() # " creators.";
   };
 
@@ -244,4 +243,23 @@ actor Oracle {
   public query func getLeaderboard() : async [(Principal, Nat)] {
     creatorHyvMined.entries().toArray();
   };
+
+  // FIX #8: Recurring daily timer placed at the END of the actor, after all
+  // variables and functions it references are declared. Motoko requires
+  // forward declarations — putting the timer at the top caused a definedness error.
+  ignore Timer.recurringTimer<system>(
+    #seconds(86400),
+    func() : async () {
+      switch (admin) {
+        case (null) {};
+        case (?_) {
+          if (not oracleCycleRunning) {
+            oracleCycleRunning := true;
+            let _result = try { await runOracleCycleInternal() } catch (_) { "" };
+            oracleCycleRunning := false;
+          };
+        };
+      };
+    }
+  );
 };
