@@ -45,6 +45,7 @@ import {
   Loader2,
   Lock,
   Percent,
+  Pickaxe,
   Play,
   Plus,
   Radio,
@@ -84,7 +85,8 @@ type Tab =
   | "revenue"
   | "partners"
   | "template"
-  | "creator";
+  | "creator"
+  | "mining";
 
 interface Transaction {
   id: string;
@@ -392,6 +394,7 @@ const CATEGORIES = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("content");
+  const [hyvBalance] = useState<number>(1247.5);
   const { identity, login, clear } = useInternetIdentity();
   const isLoggedIn = !!identity && !identity.getPrincipal().isAnonymous();
   const { actor, isFetching: actorFetching } = useActor();
@@ -491,6 +494,14 @@ export default function App() {
     string | null
   >(null);
   const [hyveilPrincipalLoading, setHyveilPrincipalLoading] = useState(false);
+  const [tokenSystemStatus, setTokenSystemStatus] = useState<{
+    tokenDeployed: boolean;
+    oracleDeployed: boolean;
+    tokenCanisterId: string | null;
+    oracleCanisterId: string | null;
+  } | null>(null);
+  const [tokenSystemDeploying, setTokenSystemDeploying] = useState(false);
+  const [tokenSystemError, setTokenSystemError] = useState<string | null>(null);
   const [wasmCheckForDeploy, setWasmCheckForDeploy] = useState<{
     loaded: boolean;
   } | null>(null);
@@ -584,6 +595,23 @@ export default function App() {
       (actor as any)
         .getHyveilCyclesBalance?.()
         .then((bal: bigint) => setHyveilCyclesBalance(bal))
+        .catch(() => {});
+      (actor as any)
+        .getTokenSystemStatus?.()
+        .then((s: any) => {
+          if (s) {
+            setTokenSystemStatus({
+              tokenDeployed: s.tokenDeployed,
+              oracleDeployed: s.oracleDeployed,
+              tokenCanisterId: s.tokenCanisterId
+                ? s.tokenCanisterId.toString()
+                : null,
+              oracleCanisterId: s.oracleCanisterId
+                ? s.oracleCanisterId.toString()
+                : null,
+            });
+          }
+        })
         .catch(() => {});
     }
   }, [isLoggedIn, actor, isAdmin]);
@@ -932,6 +960,11 @@ export default function App() {
         ]
       : []),
     {
+      id: "mining" as Tab,
+      label: "Mining",
+      icon: <Pickaxe className="w-3.5 h-3.5" />,
+    },
+    {
       id: "partners",
       label: "Partners",
       icon: <Handshake className="w-3.5 h-3.5" />,
@@ -1049,7 +1082,6 @@ export default function App() {
           ))}
         </div>
       </header>
-
       {/* MAIN CONTENT */}
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* DASHBOARD TAB */}
@@ -1590,6 +1622,191 @@ export default function App() {
                   </div>
                 )}
 
+                {/* HYV Token System (Admin Only) */}
+                {isAdmin && (
+                  <div>
+                    <h3 className="font-display font-semibold mb-4 flex items-center gap-2">
+                      <Coins className="w-4 h-4 text-purple-400" />
+                      HYV Token System
+                    </h3>
+                    <div className="glass-card rounded-2xl p-5">
+                      {tokenSystemStatus === null ? (
+                        <div className="flex items-center gap-3">
+                          <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                          <span className="text-sm text-muted-foreground">
+                            Checking token system status…
+                          </span>
+                        </div>
+                      ) : tokenSystemStatus.tokenDeployed ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">
+                              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-emerald-300">
+                                Token System is Live
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Oracle distributes HYV daily to creators based
+                                on social activity
+                              </p>
+                            </div>
+                          </div>
+                          {tokenSystemStatus.tokenCanisterId && (
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">
+                                Token Canister
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <code className="text-xs font-mono text-purple-300 bg-purple-500/10 border border-purple-500/20 px-2 py-1 rounded-lg flex-1 break-all">
+                                  {tokenSystemStatus.tokenCanisterId}
+                                </code>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="shrink-0 text-xs border border-white/10 hover:bg-white/5"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(
+                                      tokenSystemStatus.tokenCanisterId!,
+                                    );
+                                    toast.success("Copied!");
+                                  }}
+                                  data-ocid="dashboard.token.token_canister.button"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                          {tokenSystemStatus.oracleCanisterId && (
+                            <div className="space-y-1">
+                              <p className="text-xs text-muted-foreground">
+                                Oracle Canister
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <code className="text-xs font-mono text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded-lg flex-1 break-all">
+                                  {tokenSystemStatus.oracleCanisterId}
+                                </code>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="shrink-0 text-xs border border-white/10 hover:bg-white/5"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(
+                                      tokenSystemStatus.oracleCanisterId!,
+                                    );
+                                    toast.success("Copied!");
+                                  }}
+                                  data-ocid="dashboard.token.oracle_canister.button"
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                          <div className="text-xs text-emerald-400/70 flex items-center gap-1 bg-emerald-500/5 border border-emerald-500/20 rounded-lg px-3 py-2">
+                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                            HYV mining is active — ICRC-2 token tradeable on ICP
+                            exchanges
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-purple-500/15 flex items-center justify-center shrink-0">
+                              <Coins className="w-5 h-5 text-purple-400" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-white mb-1">
+                                HYV Token System
+                              </p>
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                Deploy the HYV token (ICRC-2) and social mining
+                                oracle as live ICP canisters from HYVEIL&apos;s
+                                cycles reserve.
+                              </p>
+                            </div>
+                          </div>
+                          <ul className="space-y-1.5 text-xs text-muted-foreground">
+                            <li className="flex items-center gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-purple-400 shrink-0" />
+                              Token canister: 50B cycles
+                            </li>
+                            <li className="flex items-center gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0" />
+                              Oracle canister: 50B cycles
+                            </li>
+                          </ul>
+                          <div className="text-xs text-amber-400 flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2">
+                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                            Requires ~100B cycles from HYVEIL reserve
+                          </div>
+                          {tokenSystemError && (
+                            <div className="text-xs text-red-400 flex items-center gap-1.5 bg-red-500/10 border border-red-500/25 rounded-lg px-3 py-2">
+                              <AlertTriangle className="w-3 h-3 shrink-0" />
+                              {tokenSystemError}
+                            </div>
+                          )}
+                          <Button
+                            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-semibold"
+                            disabled={tokenSystemDeploying || !actor}
+                            onClick={async () => {
+                              if (!actor) return;
+                              setTokenSystemDeploying(true);
+                              setTokenSystemError(null);
+                              try {
+                                const result = await (
+                                  actor as any
+                                ).deployTokenSystem?.();
+                                if (result) {
+                                  setTokenSystemStatus({
+                                    tokenDeployed: true,
+                                    oracleDeployed: true,
+                                    tokenCanisterId:
+                                      result.tokenCanisterId?.toString() ??
+                                      null,
+                                    oracleCanisterId:
+                                      result.oracleCanisterId?.toString() ??
+                                      null,
+                                  });
+                                  toast.success(
+                                    "HYV Token System deployed successfully!",
+                                  );
+                                }
+                              } catch (e: any) {
+                                setTokenSystemError(
+                                  e?.message ??
+                                    "Deployment failed. Check cycles balance and try again.",
+                                );
+                                toast.error("Token system deployment failed");
+                              }
+                              setTokenSystemDeploying(false);
+                            }}
+                            data-ocid="dashboard.token.deploy.primary_button"
+                          >
+                            {tokenSystemDeploying ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Deploying token system…
+                              </>
+                            ) : tokenSystemError ? (
+                              <>
+                                <RefreshCw className="w-4 h-4 mr-2" />
+                                Retry Deployment
+                              </>
+                            ) : (
+                              <>
+                                <Zap className="w-4 h-4 mr-2" />
+                                Deploy Token System
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* Recent activity */}
                 <div>
                   <h3 className="font-display font-semibold mb-4">
@@ -2550,6 +2767,49 @@ export default function App() {
                     </div>
                   </div>
                 ))}
+
+                {/* HYV Token row */}
+                <div
+                  className="flex items-center justify-between p-4"
+                  data-ocid="wallet.hyv.row"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs"
+                      style={{
+                        background: "rgba(251,191,36,0.15)",
+                        border: "1px solid rgba(251,191,36,0.35)",
+                      }}
+                    >
+                      <span style={{ color: "#fbbf24" }}>HYV</span>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm flex items-center gap-1.5">
+                        HYV
+                        <span className="text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full font-medium border border-amber-500/30">
+                          DEMO
+                        </span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        HYVEIL Token · Proof of Social Work
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-sm text-amber-300">
+                      {!isLoggedIn ? (
+                        <span className="text-muted-foreground text-xs">
+                          Connect wallet
+                        </span>
+                      ) : (
+                        `${hyvBalance.toFixed(2)} HYV`
+                      )}
+                    </p>
+                    <span className="text-xs text-amber-500/60 bg-amber-500/10 px-2 py-0.5 rounded-full">
+                      Mining Reward
+                    </span>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -2624,6 +2884,372 @@ export default function App() {
                 <Shield className="w-3.5 h-3.5" />
                 Powered by Internet Identity · ICRC-1 Standard
               </span>
+            </div>
+          </div>
+        )}
+
+        {/* MINING TAB */}
+        {activeTab === "mining" && (
+          <div className="fade-up space-y-6">
+            {/* Pre-launch banner */}
+            <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-sm">
+              <Pickaxe className="w-4 h-4 shrink-0" />
+              <span>
+                Mining goes live once the HYV token canister is configured by
+                admin. Stats shown are simulated.
+              </span>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-display font-bold mb-1 flex items-center gap-2">
+                <Pickaxe className="w-6 h-6 text-amber-400" />
+                HYV Mining
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                Proof of Social Work · 21M hard cap · BTC-style halving
+              </p>
+            </div>
+
+            {/* My Mining Stats — logged in only */}
+            {isLoggedIn && (
+              <div>
+                <h3 className="font-display font-semibold mb-3 text-amber-300">
+                  Your Mining Stats
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {/* HYV Balance */}
+                  <div
+                    className="glass-card rounded-2xl p-5 relative overflow-hidden"
+                    data-ocid="mining.hyv_balance.card"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, rgba(251,191,36,0.12) 0%, rgba(245,158,11,0.06) 100%)",
+                      border: "1px solid rgba(251,191,36,0.25)",
+                    }}
+                  >
+                    <div className="absolute top-3 right-3">
+                      <Coins className="w-8 h-8 text-amber-400/20" />
+                    </div>
+                    <p className="text-xs text-amber-400/70 mb-2 uppercase tracking-wider font-medium">
+                      HYV Balance
+                    </p>
+                    <p className="text-3xl font-display font-bold text-amber-300">
+                      {hyvBalance.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-amber-500/60 mt-1">
+                      HYV · HYVEIL Token
+                    </p>
+                  </div>
+
+                  {/* Social Score */}
+                  <div
+                    className="glass-card rounded-2xl p-5 relative overflow-hidden"
+                    data-ocid="mining.social_score.card"
+                  >
+                    <div className="absolute top-3 right-3">
+                      <TrendingUp className="w-8 h-8 text-violet-400/20" />
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-medium">
+                      Social Score
+                    </p>
+                    <p className="text-3xl font-display font-bold">342</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      pts today
+                    </p>
+                    <div className="mt-3 space-y-1 text-xs text-muted-foreground/70">
+                      <div className="flex justify-between">
+                        <span>Uploads × 10</span>
+                        <span className="text-violet-300">+30</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Views/100 × 5</span>
+                        <span className="text-violet-300">+125</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Followers × 2</span>
+                        <span className="text-violet-300">+84</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Sales × 15</span>
+                        <span className="text-violet-300">+75</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Subs × 20</span>
+                        <span className="text-violet-300">+28</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Est. Daily Reward */}
+                  <div
+                    className="glass-card rounded-2xl p-5 relative overflow-hidden"
+                    data-ocid="mining.daily_reward.card"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(5,150,105,0.04) 100%)",
+                      border: "1px solid rgba(16,185,129,0.2)",
+                    }}
+                  >
+                    <div className="absolute top-3 right-3">
+                      <Zap className="w-8 h-8 text-emerald-400/20" />
+                    </div>
+                    <p className="text-xs text-emerald-400/70 mb-2 uppercase tracking-wider font-medium">
+                      Est. Daily Reward
+                    </p>
+                    <p className="text-3xl font-display font-bold text-emerald-300">
+                      ~12.4
+                    </p>
+                    <p className="text-xs text-emerald-500/60 mt-1">
+                      HYV today
+                    </p>
+                    <p className="text-[10px] text-muted-foreground/50 mt-2">
+                      342 / 75,482 × 2,739 pool
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {!isLoggedIn && (
+              <div className="glass-card rounded-2xl p-6 text-center border border-amber-500/20">
+                <Pickaxe className="w-10 h-10 text-amber-400/50 mx-auto mb-3" />
+                <p className="font-semibold mb-1">Start Mining HYV</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Log in to see your social score and mining rewards
+                </p>
+                <button
+                  type="button"
+                  onClick={login}
+                  className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-5 py-2 rounded-xl text-sm font-semibold transition-colors"
+                  data-ocid="mining.login.button"
+                >
+                  Connect Identity
+                </button>
+              </div>
+            )}
+
+            {/* Network Stats */}
+            <div>
+              <h3 className="font-display font-semibold mb-3">Network Stats</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* HYV Mined */}
+                <div
+                  className="glass-card rounded-2xl p-5"
+                  data-ocid="mining.network_mined.card"
+                >
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                    HYV Mined
+                  </p>
+                  <p className="text-xl font-display font-bold">1,247,832</p>
+                  <p className="text-xs text-muted-foreground/70 mb-3">
+                    / 21,000,000 cap
+                  </p>
+                  <div className="w-full bg-white/5 rounded-full h-1.5">
+                    <div
+                      className="h-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-300"
+                      style={{ width: "5.94%" }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/50 mt-1">
+                    5.94% of total supply
+                  </p>
+                </div>
+
+                {/* Daily Mint Pool */}
+                <div
+                  className="glass-card rounded-2xl p-5"
+                  data-ocid="mining.daily_pool.card"
+                >
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                    Daily Mint Pool
+                  </p>
+                  <p className="text-xl font-display font-bold text-amber-300">
+                    2,739
+                  </p>
+                  <p className="text-xs text-muted-foreground/70">HYV / day</p>
+                  <p className="text-[10px] text-muted-foreground/50 mt-3">
+                    Epoch 1 · Year 1–4
+                  </p>
+                  <p className="text-[10px] text-amber-500/60 mt-0.5">
+                    Halves every 4 years
+                  </p>
+                </div>
+
+                {/* Next Halving */}
+                <div
+                  className="glass-card rounded-2xl p-5"
+                  data-ocid="mining.halving.card"
+                >
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                    Next Halving
+                  </p>
+                  <p className="text-xl font-display font-bold">1,312</p>
+                  <p className="text-xs text-muted-foreground/70 mb-3">
+                    oracle cycles remaining
+                  </p>
+                  <div className="w-full bg-white/5 rounded-full h-1.5">
+                    <div
+                      className="h-1.5 rounded-full bg-gradient-to-r from-violet-500 to-violet-300"
+                      style={{ width: "10.2%" }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/50 mt-1">
+                    148 / 1,460 epoch cycles
+                  </p>
+                </div>
+
+                {/* Total Channels */}
+                <div
+                  className="glass-card rounded-2xl p-5"
+                  data-ocid="mining.channels.card"
+                >
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                    Mining Channels
+                  </p>
+                  <p className="text-xl font-display font-bold">48</p>
+                  <p className="text-xs text-muted-foreground/70">
+                    active channels
+                  </p>
+                  <p className="text-[10px] text-emerald-400/60 mt-3 flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                    All earning HYV rewards
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Leaderboard */}
+            <div>
+              <h3 className="font-display font-semibold mb-3">
+                Mining Leaderboard
+              </h3>
+              <div
+                className="glass-card rounded-2xl overflow-hidden"
+                data-ocid="mining.leaderboard.table"
+              >
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/5 text-xs text-muted-foreground">
+                        <th className="text-left p-4">Rank</th>
+                        <th className="text-left p-4">Channel</th>
+                        <th className="text-right p-4">HYV Mined</th>
+                        <th className="text-right p-4">Social Score</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        {
+                          rank: 1,
+                          channel: "TechVibes",
+                          mined: 48320,
+                          score: 9840,
+                          medal: "🥇",
+                        },
+                        {
+                          rank: 2,
+                          channel: "CryptoDaily",
+                          mined: 41255,
+                          score: 8612,
+                          medal: "🥈",
+                        },
+                        {
+                          rank: 3,
+                          channel: "ICP_Insider",
+                          mined: 37890,
+                          score: 7943,
+                          medal: "🥉",
+                        },
+                        {
+                          rank: 4,
+                          channel: "Web3Creators",
+                          mined: 29140,
+                          score: 6210,
+                          medal: null,
+                        },
+                        {
+                          rank: 5,
+                          channel: "NovaMuse",
+                          mined: 21600,
+                          score: 4588,
+                          medal: null,
+                        },
+                      ].map((entry, i) => (
+                        <tr
+                          key={entry.channel}
+                          className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                          data-ocid={`mining.leaderboard.item.${i + 1}`}
+                        >
+                          <td className="p-4 font-mono text-xs text-muted-foreground">
+                            {entry.medal ? (
+                              <span>{entry.medal}</span>
+                            ) : (
+                              <span className="text-muted-foreground/50">
+                                #{entry.rank}
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4 font-medium">{entry.channel}</td>
+                          <td className="p-4 text-right font-mono text-amber-300">
+                            {entry.mined.toLocaleString()}
+                          </td>
+                          <td className="p-4 text-right font-mono text-violet-300">
+                            {entry.score.toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* HYV Token Info */}
+            <div className="glass-card rounded-2xl p-5 border border-amber-500/15">
+              <h3 className="font-semibold mb-3 flex items-center gap-2">
+                <Coins className="w-4 h-4 text-amber-400" />
+                HYV Token Details
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Name</p>
+                  <p className="font-semibold">HYVEIL</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Symbol</p>
+                  <p className="font-semibold text-amber-300">HYV</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">
+                    Total Supply Cap
+                  </p>
+                  <p className="font-semibold">21,000,000</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Standard</p>
+                  <p className="font-semibold">ICRC-2</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Halving</p>
+                  <p className="font-semibold">Every 4 years</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">
+                    Distribution
+                  </p>
+                  <p className="font-semibold">Proof of Social Work</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">
+                    Tradeable
+                  </p>
+                  <p className="font-semibold text-emerald-400">Yes · ICRC-2</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs mb-1">Status</p>
+                  <p className="font-semibold text-amber-400">Pre-launch</p>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -4749,8 +5375,6 @@ export default function App() {
           </DialogContent>
         </Dialog>
       </main>
-
-      {/* PARTNER CHANNEL PANEL */}
       {selectedPartnerChannel && (
         <div
           className="fixed inset-0 z-50 flex items-stretch justify-end"
@@ -5029,8 +5653,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* FOOTER */}
       <footer className="border-t border-white/5 mt-16 py-8 px-4">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground/50">
           <div className="flex items-center gap-2">
@@ -5140,7 +5762,6 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
-
       {/* ADD CONTENT MODAL */}
       <Dialog
         open={!!addContentModal}
@@ -5301,9 +5922,7 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
-
       {activeTab === "template" && <AdminCreatorTemplate isAdmin={isAdmin} />}
-
       <Toaster />
     </div>
   );

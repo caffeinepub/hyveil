@@ -223,29 +223,44 @@ export interface backendInterface {
     approvePartner(id: bigint): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
     claimOwnerIfFirst(): Promise<boolean>;
+    clearChannelWasm(): Promise<void>;
     depositIcp(amount: bigint): Promise<void>;
     getAllPartnersRevenue(): Promise<PlatformRevenue>;
     getApprovedPartners(): Promise<Array<PartnerRecord>>;
     getCallerUserProfile(): Promise<UserProfile | null>;
     getCallerUserRole(): Promise<UserRole>;
+    getChannelWasmStatus(): Promise<{
+        size: bigint;
+        loaded: boolean;
+    }>;
     getContentItems(partnerId: bigint): Promise<Array<ContentItem>>;
+    getHyvBalance(principal: Principal): Promise<bigint>;
+    getHyveilCyclesBalance(): Promise<bigint>;
+    getHyveilPrincipal(): Promise<Principal | null>;
     getMyChannelsRevenue(): Promise<Array<ChannelRevenue>>;
     getMyIcpBalance(): Promise<bigint>;
     getMyPartners(): Promise<Array<PartnerRecord>>;
+    getOraclePrincipal(): Promise<Principal | null>;
     getPartnerRevenue(partnerId: bigint): Promise<RevenueStats>;
     getPartners(): Promise<Array<PartnerRecord>>;
     getRegistrationFee(): Promise<bigint>;
+    getTokenCanisterId(): Promise<Principal | null>;
     getUserProfile(user: Principal): Promise<UserProfile | null>;
     getVideos(): Promise<Array<VideoMeta>>;
     isCallerAdmin(): Promise<boolean>;
     likeVideo(id: string): Promise<void>;
     proxyFetch(url: string, method: string, body: string | null, extraHeaders: Array<[string, string]> | null): Promise<ProxyResponse>;
     purchaseContent(contentId: string): Promise<PurchaseRecord>;
+    registerChannelForMining(channelId: Principal, ownerPrincipal: Principal): Promise<void>;
     registerPartner(input: RegisterPartnerInput): Promise<PartnerRecord>;
     revokePartner(id: bigint): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
     saveVideoMeta(meta: VideoMeta): Promise<void>;
+    setChannelWasm(wasm: Uint8Array): Promise<void>;
+    setHyveilPrincipal(p: Principal): Promise<void>;
     setMonetizationModel(partnerId: bigint, model: string): Promise<void>;
+    setOraclePrincipal(p: Principal): Promise<void>;
+    setTokenCanisterId(p: Principal): Promise<void>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
 }
 import type { PartnerRecord as _PartnerRecord, PartnerStatus as _PartnerStatus, UserProfile as _UserProfile, UserRole as _UserRole, _CaffeineStorageRefillInformation as __CaffeineStorageRefillInformation, _CaffeineStorageRefillResult as __CaffeineStorageRefillResult } from "./declarations/backend.did.d.ts";
@@ -419,6 +434,20 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async clearChannelWasm(): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.clearChannelWasm();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.clearChannelWasm();
+            return result;
+        }
+    }
     async depositIcp(arg0: bigint): Promise<void> {
         if (this.processError) {
             try {
@@ -489,6 +518,23 @@ export class Backend implements backendInterface {
             return from_candid_UserRole_n16(this._uploadFile, this._downloadFile, result);
         }
     }
+    async getChannelWasmStatus(): Promise<{
+        size: bigint;
+        loaded: boolean;
+    }> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getChannelWasmStatus();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getChannelWasmStatus();
+            return result;
+        }
+    }
     async getContentItems(arg0: bigint): Promise<Array<ContentItem>> {
         if (this.processError) {
             try {
@@ -501,6 +547,48 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getContentItems(arg0);
             return result;
+        }
+    }
+    async getHyvBalance(arg0: Principal): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getHyvBalance(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getHyvBalance(arg0);
+            return result;
+        }
+    }
+    async getHyveilCyclesBalance(): Promise<bigint> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getHyveilCyclesBalance();
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getHyveilCyclesBalance();
+            return result;
+        }
+    }
+    async getHyveilPrincipal(): Promise<Principal | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getHyveilPrincipal();
+                return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getHyveilPrincipal();
+            return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
         }
     }
     async getMyChannelsRevenue(): Promise<Array<ChannelRevenue>> {
@@ -545,6 +633,20 @@ export class Backend implements backendInterface {
             return from_candid_vec_n10(this._uploadFile, this._downloadFile, result);
         }
     }
+    async getOraclePrincipal(): Promise<Principal | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getOraclePrincipal();
+                return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getOraclePrincipal();
+            return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
+        }
+    }
     async getPartnerRevenue(arg0: bigint): Promise<RevenueStats> {
         if (this.processError) {
             try {
@@ -585,6 +687,20 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.getRegistrationFee();
             return result;
+        }
+    }
+    async getTokenCanisterId(): Promise<Principal | null> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.getTokenCanisterId();
+                return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.getTokenCanisterId();
+            return from_candid_opt_n18(this._uploadFile, this._downloadFile, result);
         }
     }
     async getUserProfile(arg0: Principal): Promise<UserProfile | null> {
@@ -646,14 +762,14 @@ export class Backend implements backendInterface {
     async proxyFetch(arg0: string, arg1: string, arg2: string | null, arg3: Array<[string, string]> | null): Promise<ProxyResponse> {
         if (this.processError) {
             try {
-                const result = await this.actor.proxyFetch(arg0, arg1, to_candid_opt_n18(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n19(this._uploadFile, this._downloadFile, arg3));
+                const result = await this.actor.proxyFetch(arg0, arg1, to_candid_opt_n19(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n20(this._uploadFile, this._downloadFile, arg3));
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.proxyFetch(arg0, arg1, to_candid_opt_n18(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n19(this._uploadFile, this._downloadFile, arg3));
+            const result = await this.actor.proxyFetch(arg0, arg1, to_candid_opt_n19(this._uploadFile, this._downloadFile, arg2), to_candid_opt_n20(this._uploadFile, this._downloadFile, arg3));
             return result;
         }
     }
@@ -668,6 +784,20 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.purchaseContent(arg0);
+            return result;
+        }
+    }
+    async registerChannelForMining(arg0: Principal, arg1: Principal): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.registerChannelForMining(arg0, arg1);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.registerChannelForMining(arg0, arg1);
             return result;
         }
     }
@@ -727,6 +857,34 @@ export class Backend implements backendInterface {
             return result;
         }
     }
+    async setChannelWasm(arg0: Uint8Array): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setChannelWasm(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setChannelWasm(arg0);
+            return result;
+        }
+    }
+    async setHyveilPrincipal(arg0: Principal): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setHyveilPrincipal(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setHyveilPrincipal(arg0);
+            return result;
+        }
+    }
     async setMonetizationModel(arg0: bigint, arg1: string): Promise<void> {
         if (this.processError) {
             try {
@@ -738,6 +896,34 @@ export class Backend implements backendInterface {
             }
         } else {
             const result = await this.actor.setMonetizationModel(arg0, arg1);
+            return result;
+        }
+    }
+    async setOraclePrincipal(arg0: Principal): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setOraclePrincipal(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setOraclePrincipal(arg0);
+            return result;
+        }
+    }
+    async setTokenCanisterId(arg0: Principal): Promise<void> {
+        if (this.processError) {
+            try {
+                const result = await this.actor.setTokenCanisterId(arg0);
+                return result;
+            } catch (e) {
+                this.processError(e);
+                throw new Error("unreachable");
+            }
+        } else {
+            const result = await this.actor.setTokenCanisterId(arg0);
             return result;
         }
     }
@@ -769,6 +955,9 @@ function from_candid__CaffeineStorageRefillResult_n4(_uploadFile: (file: Externa
     return from_candid_record_n5(_uploadFile, _downloadFile, value);
 }
 function from_candid_opt_n15(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [_UserProfile]): UserProfile | null {
+    return value.length === 0 ? null : value[0];
+}
+function from_candid_opt_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [Principal]): Principal | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_opt_n6(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: [] | [boolean]): boolean | null {
@@ -858,10 +1047,10 @@ function to_candid__CaffeineStorageRefillInformation_n2(_uploadFile: (file: Exte
 function to_candid_opt_n1(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: _CaffeineStorageRefillInformation | null): [] | [__CaffeineStorageRefillInformation] {
     return value === null ? candid_none() : candid_some(to_candid__CaffeineStorageRefillInformation_n2(_uploadFile, _downloadFile, value));
 }
-function to_candid_opt_n18(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: string | null): [] | [string] {
+function to_candid_opt_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: string | null): [] | [string] {
     return value === null ? candid_none() : candid_some(value);
 }
-function to_candid_opt_n19(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<[string, string]> | null): [] | [Array<[string, string]>] {
+function to_candid_opt_n20(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: Array<[string, string]> | null): [] | [Array<[string, string]>] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_record_n3(_uploadFile: (file: ExternalBlob) => Promise<Uint8Array>, _downloadFile: (file: Uint8Array) => Promise<ExternalBlob>, value: {

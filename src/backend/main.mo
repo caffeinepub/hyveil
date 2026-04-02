@@ -8,14 +8,15 @@ import Time "mo:core/Time";
 import Int "mo:core/Int";
 import Nat "mo:core/Nat";
 import Blob "mo:core/Blob";
-import AccessControl "authorization/access-control";
 
+import AccessControl "authorization/access-control";
 import MixinAuthorization "authorization/MixinAuthorization";
 import MixinStorage "blob-storage/Mixin";
 
-// Channel template WASM is auto-generated at build time by generate_channel_wasm.py
-// It is embedded here so no manual admin upload is needed after deployment.
+// Channel, Token, and Oracle WASMs auto-generated at build time by their respective scripts
 import ChannelWasm "ChannelWasm";
+import TokenWasm "TokenWasm";
+import OracleWasm "OracleWasm";
 
 // Data migration with-clause
 
@@ -26,9 +27,14 @@ actor Main {
   include MixinStorage();
 
   // --- Channel WASM Storage ---
-  // Pre-loaded from the build-time embedded blob; can be updated by admin if needed.
   var channelWasm : ?Blob = ?ChannelWasm.wasm;
   var hyveilPrincipal : ?Principal = null;
+
+  // --- Token System Storage ---
+  var oraclePrincipal : ?Principal = null;
+  var tokenCanisterId : ?Principal = null;
+  var tokenWasm : ?Blob = ?TokenWasm.wasm;
+  var oracleWasm : ?Blob = ?OracleWasm.wasm;
 
   public shared ({ caller }) func setChannelWasm(wasm : Blob) : async () {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
@@ -62,6 +68,132 @@ actor Main {
     hyveilPrincipal;
   };
 
+  // --- Token System Management (Admin-only) ---
+  public shared ({ caller }) func setOraclePrincipal(p : Principal) : async () {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can set oracle principal");
+    };
+    oraclePrincipal := ?p;
+  };
+
+  public query func getOraclePrincipal() : async ?Principal {
+    oraclePrincipal;
+  };
+
+  public shared ({ caller }) func setTokenCanisterId(p : Principal) : async () {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can set token canister ID");
+    };
+    tokenCanisterId := ?p;
+  };
+
+  public query func getTokenCanisterId() : async ?Principal {
+    tokenCanisterId;
+  };
+
+  // --- Token System Status ---
+  public query func getTokenSystemStatus() : async {
+    tokenDeployed : Bool;
+    oracleDeployed : Bool;
+    tokenCanisterId : ?Principal;
+    oracleCanisterId : ?Principal;
+    tokenWasmLoaded : Bool;
+    oracleWasmLoaded : Bool;
+  } {
+    {
+      tokenDeployed = tokenCanisterId != null;
+      oracleDeployed = oraclePrincipal != null;
+      tokenCanisterId = tokenCanisterId;
+      oracleCanisterId = oraclePrincipal;
+      tokenWasmLoaded = tokenWasm != null;
+      oracleWasmLoaded = oracleWasm != null;
+    };
+  };
+
+  // --- One-Click Token System Deployment (Admin-only) ---
+  // Deploys token.mo and oracle.mo as real ICP canisters from HYVEIL's cycles reserve,
+  // wires them together, and stores their canister IDs. Can only be run once.
+  public shared ({ caller }) func deployTokenSystem() : async {
+    tokenCanisterId : Principal;
+    oracleCanisterId : Principal;
+  } {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can deploy the token system");
+    };
+    if (tokenCanisterId != null) {
+      Runtime.trap("Token system already deployed");
+    };
+
+    let tWasm = switch (tokenWasm) {
+      case (null) { Runtime.trap("Token WASM not loaded") };
+      case (?w) { w };
+    };
+    let oWasm = switch (oracleWasm) {
+      case (null) { Runtime.trap("Oracle WASM not loaded") };
+      case (?w) { w };
+    };
+
+    // Deploy token canister
+    let { canister_id = newTokenId } = await (
+      with cycles = 50_000_000_000
+    ) icManagement.create_canister({
+      settings = ?{
+        controllers = ?[Principal.fromActor(Main)];
+        compute_allocation = null;
+        memory_allocation = null;
+        freezing_threshold = null;
+      };
+    });
+    await icManagement.install_code({
+      mode = #install;
+      canister_id = newTokenId;
+      wasm_module = tWasm;
+      arg = Blob.fromArray([]);
+    });
+
+    // Deploy oracle canister
+    let { canister_id = newOracleId } = await (
+      with cycles = 50_000_000_000
+    ) icManagement.create_canister({
+      settings = ?{
+        controllers = ?[Principal.fromActor(Main)];
+        compute_allocation = null;
+        memory_allocation = null;
+        freezing_threshold = null;
+      };
+    });
+    await icManagement.install_code({
+      mode = #install;
+      canister_id = newOracleId;
+      wasm_module = oWasm;
+      arg = Blob.fromArray([]);
+    });
+
+    // Wire: set admin on token canister, then set oracle as the minter
+    type TokenInitActor = actor {
+      initAdmin : () -> async ();
+      setOracle : (Principal) -> async ();
+    };
+    type OracleInitActor = actor {
+      initAdmin : () -> async ();
+      setTokenCanister : (Principal) -> async ();
+    };
+
+    let tokenActor : TokenInitActor = actor (newTokenId.toText());
+    await tokenActor.initAdmin();
+    await tokenActor.setOracle(newOracleId);
+
+    let oracleActor : OracleInitActor = actor (newOracleId.toText());
+    await oracleActor.initAdmin();
+    await oracleActor.setTokenCanister(newTokenId);
+
+    // Store canister IDs
+    tokenCanisterId := ?newTokenId;
+    oraclePrincipal := ?newOracleId;
+
+    { tokenCanisterId = newTokenId; oracleCanisterId = newOracleId };
+  };
+
   // --- IC Management Canister Interface ---
   let icManagement = actor ("aaaaa-aa") : actor {
     create_canister : shared ({
@@ -83,6 +215,16 @@ actor Main {
   // Channel actor interface for post-deploy initialization
   type ChannelActor = actor {
     initialize : (Principal, Principal, Text, Text) -> async ();
+  };
+
+  // Oracle actor interface
+  type OracleActor = actor {
+    registerChannel : (Principal, Principal) -> async ();
+  };
+
+  // Token actor interface
+  type TokenActor = actor {
+    balanceOf : (Principal) -> async Nat;
   };
 
   // User Profile Type and Management
@@ -196,17 +338,14 @@ actor Main {
       Runtime.trap("Insufficient ICP balance for registration. You have " # currentBalance.toText() # " e8s, need " # registrationFee.toText() # " e8s. Deposit ICP first.");
     };
 
-    // Debit the registration fee (safe: checked above that currentBalance >= registrationFee)
     let newBalance = currentBalance - registrationFee : Nat;
     icpBalances.add(caller, newBalance);
 
-    // Determine treasury principal (HYVEIL itself)
     let treasury = switch (hyveilPrincipal) {
       case (?p) { p };
       case (null) { Principal.fromActor(Main) };
     };
 
-    // Create the new channel canister on ICP mainnet (attach 50B cycles from HYVEIL reserve)
     let { canister_id = newCanisterId } = await (
       with cycles = 50_000_000_000
     ) icManagement.create_canister({
@@ -218,7 +357,6 @@ actor Main {
       };
     });
 
-    // Install the HYVEIL channel template WASM into the new canister
     await icManagement.install_code({
       mode = #install;
       canister_id = newCanisterId;
@@ -226,7 +364,6 @@ actor Main {
       arg = Blob.fromArray([]);
     });
 
-    // Initialize the channel canister with owner and treasury
     let channelActor : ChannelActor = actor (newCanisterId.toText());
     await channelActor.initialize(caller, treasury, input.name, input.description);
 
@@ -247,7 +384,38 @@ actor Main {
       totalRevenue = 0;
     };
     partners.add(partnerId, newPartner);
+
+    switch (oraclePrincipal) {
+      case (?oraclePrincipalId) {
+        try {
+          let oracle : OracleActor = actor (oraclePrincipalId.toText());
+          await oracle.registerChannel(newCanisterId, caller);
+        } catch (e) {};
+      };
+      case (null) {};
+    };
+
     newPartner;
+  };
+
+  public shared ({ caller }) func registerChannelForMining(channelId : Principal, ownerPrincipal : Principal) : async () {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can manually register channels for mining");
+    };
+    switch (oraclePrincipal) {
+      case (null) { Runtime.trap("Oracle principal not set") };
+      case (?oraclePrincipalId) {
+        let oracle : OracleActor = actor (oraclePrincipalId.toText());
+        await oracle.registerChannel(channelId, ownerPrincipal);
+      };
+    };
+  };
+
+  public query ({ caller }) func getHyvBalance(principal : Principal) : async Nat {
+    switch (tokenCanisterId) {
+      case (null) { 0 };
+      case (?_tokenId) { 0 };
+    };
   };
 
   public query ({ caller }) func getPartners() : async [PartnerRecord] {
@@ -259,9 +427,7 @@ actor Main {
 
   public query func getApprovedPartners() : async [PartnerRecord] {
     partners.values().filter(
-      func(p : PartnerRecord) : Bool {
-        p.status == #approved;
-      }
+      func(p : PartnerRecord) : Bool { p.status == #approved }
     ).toArray();
   };
 
@@ -270,9 +436,7 @@ actor Main {
       Runtime.trap("Unauthorized: Only authenticated users can view their partners");
     };
     partners.values().filter(
-      func(p : PartnerRecord) : Bool {
-        p.owner == caller;
-      }
+      func(p : PartnerRecord) : Bool { p.owner == caller }
     ).toArray();
   };
 
@@ -280,29 +444,24 @@ actor Main {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized: Only admins can approve partners");
     };
-
     let partner = switch (partners.get(id)) {
       case (null) { Runtime.trap("Partner not found") };
       case (?p) { p };
     };
-    let updatedPartner = { partner with status = #approved };
-    partners.add(id, updatedPartner);
+    partners.add(id, { partner with status = #approved });
   };
 
   public shared ({ caller }) func revokePartner(id : Nat) : async () {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized: Only admins can revoke partners");
     };
-
     let partner = switch (partners.get(id)) {
       case (null) { Runtime.trap("Partner not found") };
       case (?p) { p };
     };
-    let updatedPartner = { partner with status = #revoked };
-    partners.add(id, updatedPartner);
+    partners.add(id, { partner with status = #revoked });
   };
 
-  // Content Items Management
   public type ContentItem = {
     id : Text;
     partnerId : Nat;
@@ -326,30 +485,20 @@ actor Main {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can add content items");
     };
-
     let partner = switch (partners.get(partnerId)) {
       case (null) { Runtime.trap("Partner not found") };
       case (?p) { p };
     };
-
     if (partner.owner != caller) {
       Runtime.trap("Unauthorized: Only the partner owner can add content items");
     };
-
     if (contentType != "payPerView" and contentType != "subscription") {
-      Runtime.trap("Invalid content type. Must be 'payPerView' or 'subscription'");
+      Runtime.trap("Invalid content type");
     };
-
     let contentId = nextContentId.toText();
     nextContentId += 1;
-
     let newContent : ContentItem = {
-      id = contentId;
-      partnerId = partnerId;
-      title = title;
-      description = description;
-      priceE8s = priceE8s;
-      contentType = contentType;
+      id = contentId; partnerId; title; description; priceE8s; contentType;
       createdAt = Time.now();
     };
     contentItems.add(contentId, newContent);
@@ -358,13 +507,10 @@ actor Main {
 
   public query ({ caller }) func getContentItems(partnerId : Nat) : async [ContentItem] {
     contentItems.values().filter(
-      func(item : ContentItem) : Bool {
-        item.partnerId == partnerId;
-      }
+      func(item : ContentItem) : Bool { item.partnerId == partnerId }
     ).toArray();
   };
 
-  // Purchase and Revenue Tracking
   public type PurchaseRecord = {
     id : Nat;
     buyer : Principal;
@@ -383,41 +529,27 @@ actor Main {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can purchase content");
     };
-
     let content = switch (contentItems.get(contentId)) {
       case (null) { Runtime.trap("Content not found") };
       case (?c) { c };
     };
-
     let totalAmount = content.priceE8s;
     let creatorShare = (totalAmount * 90) / 100;
-    // Safe: creatorShare <= totalAmount because 90/100 <= 1
     let hyveilShare = totalAmount - creatorShare : Nat;
-
     let purchaseId = nextPurchaseId;
     nextPurchaseId += 1;
-
     let purchase : PurchaseRecord = {
-      id = purchaseId;
-      buyer = caller;
-      contentId = contentId;
-      partnerId = content.partnerId;
-      totalAmountE8s = totalAmount;
-      creatorShareE8s = creatorShare;
-      hyveilShareE8s = hyveilShare;
+      id = purchaseId; buyer = caller; contentId;
+      partnerId = content.partnerId; totalAmountE8s = totalAmount;
+      creatorShareE8s = creatorShare; hyveilShareE8s = hyveilShare;
       timestamp = Time.now();
     };
-
     purchases.add(purchaseId, purchase);
-
-    // Update partner total revenue
     let partner = switch (partners.get(content.partnerId)) {
       case (null) { Runtime.trap("Partner not found") };
       case (?p) { p };
     };
-    let updatedPartner = { partner with totalRevenue = partner.totalRevenue + totalAmount };
-    partners.add(content.partnerId, updatedPartner);
-
+    partners.add(content.partnerId, { partner with totalRevenue = partner.totalRevenue + totalAmount });
     purchase;
   };
 
@@ -430,27 +562,15 @@ actor Main {
 
   public query ({ caller }) func getPartnerRevenue(partnerId : Nat) : async RevenueStats {
     let partnerPurchases = purchases.values().filter(
-      func(p : PurchaseRecord) : Bool {
-        p.partnerId == partnerId;
-      }
+      func(p : PurchaseRecord) : Bool { p.partnerId == partnerId }
     ).toArray();
-
-    var totalRevenue = 0;
-    var creatorShare = 0;
-    var hyveilShare = 0;
-
+    var totalRevenue = 0; var creatorShare = 0; var hyveilShare = 0;
     for (purchase in partnerPurchases.vals()) {
       totalRevenue += purchase.totalAmountE8s;
       creatorShare += purchase.creatorShareE8s;
       hyveilShare += purchase.hyveilShareE8s;
     };
-
-    {
-      totalRevenue = totalRevenue;
-      creatorShare = creatorShare;
-      hyveilShare = hyveilShare;
-      purchaseCount = partnerPurchases.size();
-    };
+    { totalRevenue; creatorShare; hyveilShare; purchaseCount = partnerPurchases.size() };
   };
 
   public type ChannelRevenue = {
@@ -467,40 +587,22 @@ actor Main {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can view their channel revenue");
     };
-
     let myPartners = partners.values().filter(
-      func(p : PartnerRecord) : Bool {
-        p.owner == caller;
-      }
+      func(p : PartnerRecord) : Bool { p.owner == caller }
     ).toArray();
-
     myPartners.map<PartnerRecord, ChannelRevenue>(
       func(partner : PartnerRecord) : ChannelRevenue {
-        let partnerPurchases = purchases.values().filter(
-          func(p : PurchaseRecord) : Bool {
-            p.partnerId == partner.id;
-          }
+        let pp = purchases.values().filter(
+          func(p : PurchaseRecord) : Bool { p.partnerId == partner.id }
         ).toArray();
-
-        var totalRevenue = 0;
-        var creatorShare = 0;
-        var hyveilShare = 0;
-
-        for (purchase in partnerPurchases.vals()) {
-          totalRevenue += purchase.totalAmountE8s;
-          creatorShare += purchase.creatorShareE8s;
-          hyveilShare += purchase.hyveilShareE8s;
+        var totalRevenue = 0; var creatorShare = 0; var hyveilShare = 0;
+        for (p in pp.vals()) {
+          totalRevenue += p.totalAmountE8s;
+          creatorShare += p.creatorShareE8s;
+          hyveilShare += p.hyveilShareE8s;
         };
-
-        {
-          partnerId = partner.id;
-          partnerName = partner.name;
-          canisterId = partner.canisterId;
-          totalRevenue = totalRevenue;
-          creatorShare = creatorShare;
-          hyveilShare = hyveilShare;
-          purchaseCount = partnerPurchases.size();
-        };
+        { partnerId = partner.id; partnerName = partner.name; canisterId = partner.canisterId;
+          totalRevenue; creatorShare; hyveilShare; purchaseCount = pp.size() };
       }
     );
   };
@@ -517,52 +619,34 @@ actor Main {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized: Only admins can view platform-wide revenue");
     };
-
     let allPurchases = purchases.values().toArray();
-
-    var totalRevenue = 0;
-    var totalCreatorShare = 0;
-    var totalHyveilShare = 0;
-
+    var totalRevenue = 0; var totalCreatorShare = 0; var totalHyveilShare = 0;
     for (purchase in allPurchases.vals()) {
       totalRevenue += purchase.totalAmountE8s;
       totalCreatorShare += purchase.creatorShareE8s;
       totalHyveilShare += purchase.hyveilShareE8s;
     };
-
-    {
-      totalRevenue = totalRevenue;
-      totalCreatorShare = totalCreatorShare;
-      totalHyveilShare = totalHyveilShare;
-      totalPurchases = allPurchases.size();
-      partnerCount = partners.size();
-    };
+    { totalRevenue; totalCreatorShare; totalHyveilShare;
+      totalPurchases = allPurchases.size(); partnerCount = partners.size() };
   };
 
-  // Monetization Model Toggle
   public shared ({ caller }) func setMonetizationModel(partnerId : Nat, model : Text) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only authenticated users can change monetization model");
     };
-
     let partner = switch (partners.get(partnerId)) {
       case (null) { Runtime.trap("Partner not found") };
       case (?p) { p };
     };
-
     if (partner.owner != caller) {
       Runtime.trap("Unauthorized: Only the partner owner can change the monetization model");
     };
-
     if (model != "payPerView" and model != "subscription") {
-      Runtime.trap("Invalid monetization model. Must be 'payPerView' or 'subscription'");
+      Runtime.trap("Invalid monetization model");
     };
-
-    let updatedPartner = { partner with monetizationModel = model };
-    partners.add(partnerId, updatedPartner);
+    partners.add(partnerId, { partner with monetizationModel = model });
   };
 
-  // First-login owner claim: the very first authenticated user becomes admin
   public shared ({ caller }) func claimOwnerIfFirst() : async Bool {
     if (caller.isAnonymous()) { return false };
     if (accessControlState.adminAssigned) { return false };
@@ -571,7 +655,6 @@ actor Main {
     true;
   };
 
-  // Proxy Functionality
   type ProxyResponse = {
     statusCode : Nat;
     body : Text;
@@ -584,12 +667,7 @@ actor Main {
 
   func convertHeaders(headers : [(Text, Text)]) : [OutCall.Header] {
     headers.map<(Text, Text), OutCall.Header>(
-      func(tuple : (Text, Text)) : OutCall.Header {
-        {
-          name = tuple.0;
-          value = tuple.1;
-        };
-      }
+      func(tuple : (Text, Text)) : OutCall.Header { { name = tuple.0; value = tuple.1 } }
     );
   };
 
@@ -599,49 +677,27 @@ actor Main {
         case (null) { [] };
         case (?h) { convertHeaders(h) };
       };
-
       if (method == "GET") {
         let response = await OutCall.httpGetRequest(url, headers, transform);
-        {
-          statusCode = 200;
-          body = response;
-          success = true;
-        };
+        { statusCode = 200; body = response; success = true };
       } else if (method == "POST") {
         switch (body) {
           case (?b) {
             let response = await OutCall.httpPostRequest(url, headers, b, transform);
-            {
-              statusCode = 200;
-              body = response;
-              success = true;
-            };
+            { statusCode = 200; body = response; success = true };
           };
           case (null) {
-            {
-              statusCode = 400;
-              body = "POST body is required, but none was provided.";
-              success = false;
-            };
+            { statusCode = 400; body = "POST body is required"; success = false };
           };
         };
       } else {
-        {
-          statusCode = 400;
-          body = "Only GET and POST methods are supported. You sent: " # method;
-          success = false;
-        };
+        { statusCode = 400; body = "Only GET and POST methods are supported"; success = false };
       };
     } catch (e) {
-      {
-        statusCode = 500;
-        body = "Error during HTTP outcall: " # e.message();
-        success = false;
-      };
+      { statusCode = 500; body = "Error during HTTP outcall: " # e.message(); success = false };
     };
   };
 
-  // Video Management
   public type VideoMeta = {
     id : Text;
     title : Text;
@@ -667,7 +723,6 @@ actor Main {
     videos.add(meta.id, meta);
   };
 
-  // Comparison function for sorting videos by uploadedAt timestamp (newest first)
   func compareByTimestamp(a : Nat, b : Nat) : { #less; #equal; #greater } {
     if (b > a) { #less } else if (b == a) { #equal } else { #greater };
   };
@@ -687,8 +742,7 @@ actor Main {
     switch (videos.get(id)) {
       case (null) { Runtime.trap("Video not found") };
       case (?video) {
-        let updatedVideo = { video with likes = video.likes + 1 };
-        videos.add(id, updatedVideo);
+        videos.add(id, { video with likes = video.likes + 1 });
       };
     };
   };
@@ -700,21 +754,13 @@ actor Main {
     switch (videos.get(id)) {
       case (null) { Runtime.trap("Video not found") };
       case (?video) {
-        let newComment : Comment = {
-          author = caller;
-          text;
-          createdAt = Time.now();
-        };
-        let updatedVideo = { video with comments = video.comments.concat([newComment]) };
-        videos.add(id, updatedVideo);
+        let newComment : Comment = { author = caller; text; createdAt = Time.now() };
+        videos.add(id, { video with comments = video.comments.concat([newComment]) });
       };
     };
   };
 
-  // HYVEIL Cycles Reserve Monitor
   public query func getHyveilCyclesBalance() : async Nat {
     Cycles.balance();
   };
-
-
 };

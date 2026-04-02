@@ -253,4 +253,30 @@ actor {
       topContentId;
     };
   };
+
+  // --- Social Metrics (read by oracle for Proof of Social Work mining) ---
+  public query func getSocialMetrics() : async {
+    uploads : Nat;
+    views : Nat;
+    followers : Nat;
+    sales : Nat;
+    subscriptions : Nat;
+  } {
+    var totalViews = 0;
+    var sales = 0;
+    var subscriptions = 0;
+    for (item in contentItems.values()) {
+      totalViews += item.viewCount;
+    };
+    for (p in purchases.values()) {
+      if (p.amountE8s > 0) { sales += 1 };
+    };
+    {
+      uploads = contentItems.size();
+      views = totalViews;
+      followers = followers.size();
+      sales;
+      subscriptions = 0; // subscription billing not yet implemented
+    };
+  };
 };
