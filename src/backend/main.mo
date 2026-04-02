@@ -48,6 +48,14 @@ actor Main {
   let PARTNER_TOPUP_CYCLES : Nat = 50_000_000_000;
   let PARTNER_TOPUP_FEE : Nat = 100_000_000;
 
+  // --- Input length limits (DoS / memory protection) ---
+  let MAX_NAME_LEN : Nat = 128;
+  let MAX_DESC_LEN : Nat = 1024;
+  let MAX_WEBSITE_LEN : Nat = 256;
+  let MAX_COMMENT_LEN : Nat = 2048;
+  let MAX_COMMENTS_PER_VIDEO : Nat = 500;
+  let MAX_CHAINS_LEN : Nat = 16;
+
   var lastAutoRefillTime : Int = 0;
   var autoRefillCount : Nat = 0;
   var lastOracleCyclesChecked : Nat = 0;
@@ -389,6 +397,9 @@ actor Main {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
       Runtime.trap("Unauthorized: Only users can save profiles");
     };
+    if (profile.name.size() > MAX_NAME_LEN) {
+      Runtime.trap("Name too long. Maximum " # MAX_NAME_LEN.toText() # " characters.");
+    };
     userProfiles.add(caller, profile);
   };
 
@@ -446,6 +457,8 @@ actor Main {
   var nextPartnerId = 1;
   let partners = Map.empty<Nat, PartnerRecord>();
   let icpBalances = Map.empty<Principal, Nat>();
+  // M-10: Track processed CMC block indices to prevent double-submission exploit
+  let processedBlockIndices = Map.empty<Nat64, Bool>();
 
   public shared ({ caller }) func depositIcp(amount : Nat) : async () {
     if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
@@ -575,6 +588,18 @@ actor Main {
     let wasm = switch (channelWasm) {
       case (null) { Runtime.trap("Channel WASM not loaded. Admin must call setChannelWasm first.") };
       case (?w) { w };
+    };
+    if (input.name.size() == 0 or input.name.size() > MAX_NAME_LEN) {
+      Runtime.trap("Channel name must be 1–" # MAX_NAME_LEN.toText() # " characters.");
+    };
+    if (input.description.size() > MAX_DESC_LEN) {
+      Runtime.trap("Description too long. Maximum " # MAX_DESC_LEN.toText() # " characters.");
+    };
+    if (input.website.size() > MAX_WEBSITE_LEN) {
+      Runtime.trap("Website URL too long. Maximum " # MAX_WEBSITE_LEN.toText() # " characters.");
+    };
+    if (input.chains.size() > MAX_CHAINS_LEN) {
+      Runtime.trap("Too many chains listed. Maximum " # MAX_CHAINS_LEN.toText() # " chains.");
     };
     let registrationFee = 100_000_000;
     let currentBalance = switch (icpBalances.get(caller)) {
@@ -757,6 +782,12 @@ actor Main {
     };
     if (contentType != "payPerView" and contentType != "subscription") {
       Runtime.trap("Invalid content type");
+    };
+    if (title.size() == 0 or title.size() > MAX_NAME_LEN) {
+      Runtime.trap("Title must be 1–" # MAX_NAME_LEN.toText() # " characters.");
+    };
+    if (description.size() > MAX_DESC_LEN) {
+      Runtime.trap("Description too long. Maximum " # MAX_DESC_LEN.toText() # " characters.");
     };
     let contentId = nextContentId.toText();
     nextContentId += 1;
@@ -1152,6 +1183,12 @@ actor Main {
     switch (videos.get(id)) {
       case (null) { Runtime.trap("Video not found") };
       case (?video) {
+        if (text.size() == 0 or text.size() > MAX_COMMENT_LEN) {
+          Runtime.trap("Comment must be 1–" # MAX_COMMENT_LEN.toText() # " characters.");
+        };
+        if (video.comments.size() >= MAX_COMMENTS_PER_VIDEO) {
+          Runtime.trap("Video has reached the maximum number of comments (" # MAX_COMMENTS_PER_VIDEO.toText() # ").");
+        };
         let newComment : Comment = { author = caller; text; createdAt = Time.now() };
         videos.add(id, { video with comments = video.comments.concat([newComment]) });
       };
@@ -1190,6 +1227,11 @@ actor Main {
     if (not (AccessControl.isAdmin(accessControlState, caller))) {
       Runtime.trap("Unauthorized: Only admins can call notifyTopUp");
     };
+    // M-10: Prevent the same block index from being submitted twice (double-credit exploit)
+    if (processedBlockIndices.get(blockIndex) != null) {
+      Runtime.trap("Block index already processed. Each ICP transfer can only be used once.");
+    };
+    processedBlockIndices.add(blockIndex, true);
     let result = await cmc.notify_top_up({
       canister_id = Principal.fromActor(Main);
       block_index = blockIndex;

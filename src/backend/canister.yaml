@@ -4,5 +4,18 @@ build:
   steps:
     - type: script
       commands:
+        # Step 1: Compile channel.mo → channel.wasm (partner channel template)
+        - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --package base $MOTOKO_BASE --package core $MOTOKO_CORE channel.mo -o channel.wasm
+        # Step 2: Compile token.mo → token.wasm (HYV ICRC-2 token)
+        - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --package base $MOTOKO_BASE --package core $MOTOKO_CORE token.mo -o token.wasm
+        # Step 3: Compile oracle.mo → oracle.wasm (social mining oracle)
+        - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --package base $MOTOKO_BASE --package core $MOTOKO_CORE oracle.mo -o oracle.wasm
+        # Step 4: Convert channel.wasm → ChannelWasm.mo blob module
+        - python3 generate_channel_wasm.py
+        # Step 5: Convert token.wasm → TokenWasm.mo blob module
+        - python3 generate_token_wasm.py
+        # Step 6: Convert oracle.wasm → OracleWasm.mo blob module
+        - python3 generate_oracle_wasm.py
+        # Step 7: Compile main.mo (imports ChannelWasm, TokenWasm, OracleWasm) → backend.wasm
         - $MOC_PATH --implicit-package core --default-persistent-actors -no-check-ir -E M0236 -E M0235 -E M0223 -E M0237 --actor-idl system-idl --package base $MOTOKO_BASE --package core $MOTOKO_CORE main.mo -o backend.wasm
         - mv backend.wasm "$ICP_WASM_OUTPUT_PATH"

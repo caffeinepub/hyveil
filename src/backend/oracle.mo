@@ -83,7 +83,10 @@ actor Oracle {
     ignore channelRegistry.remove(channelId);
   };
 
-  public query func getRegisteredChannels() : async [(Principal, Principal)] {
+  // H-10 fix: restricted to admin-only. Public access would expose the
+  // (channelId → ownerPrincipal) graph, deanonymizing all creator identities.
+  public shared ({ caller }) func getRegisteredChannels() : async [(Principal, Principal)] {
+    requireAdmin(caller);
     channelRegistry.entries().toArray();
   };
 

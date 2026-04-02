@@ -454,7 +454,7 @@ const CATEGORIES = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("content");
-  const [hyvBalance] = useState<number>(1247.5);
+  const [hyvBalance, setHyvBalance] = useState<number>(0);
   const { identity, login, clear } = useInternetIdentity();
   const isLoggedIn = !!identity && !identity.getPrincipal().isAnonymous();
   const { actor, isFetching: actorFetching } = useActor();
@@ -733,6 +733,16 @@ export default function App() {
         .catch(() => {});
     }
   }, [isLoggedIn, actor, isAdmin]);
+
+  // Fetch real HYV token balance from the token canister
+  useEffect(() => {
+    if (!actor || !isLoggedIn || !identity) return;
+    const principal = identity.getPrincipal();
+    actor
+      .getHyvBalance(principal)
+      .then((bal: bigint) => setHyvBalance(Number(bal) / 1e8))
+      .catch(() => {});
+  }, [actor, isLoggedIn, identity]);
 
   const fetchChannelContent = async (partnerId: bigint) => {
     if (!actor) return;

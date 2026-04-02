@@ -51,6 +51,15 @@ actor {
     thumbnailUrl : Text
   ) : async ContentItem {
     if (caller != owner) { Runtime.trap("Unauthorized: Only channel owner can add content") };
+    if (title.size() == 0 or title.size() > 128) {
+      Runtime.trap("Title must be 1–128 characters.");
+    };
+    if (description.size() > 1024) {
+      Runtime.trap("Description too long. Maximum 1024 characters.");
+    };
+    if (thumbnailUrl.size() > 512) {
+      Runtime.trap("Thumbnail URL too long. Maximum 512 characters.");
+    };
     let id = nextContentId;
     nextContentId += 1;
     let item : ContentItem = {
@@ -247,6 +256,12 @@ actor {
 
   public shared ({ caller }) func updateChannelInfo(name : Text, description : Text) : async () {
     if (caller != owner) { Runtime.trap("Unauthorized") };
+    if (name.size() == 0 or name.size() > 128) {
+      Runtime.trap("Channel name must be 1–128 characters.");
+    };
+    if (description.size() > 1024) {
+      Runtime.trap("Description too long. Maximum 1024 characters.");
+    };
     channelName := name;
     channelDescription := description;
   };
@@ -302,7 +317,9 @@ actor {
       if (p.amountE8s > 0) { sales += 1 };
     };
     {
-      uploads = contentItems.size();
+      // H-07 fix: only count active (non-deactivated) content to prevent score inflation
+      // from repeatedly adding/removing content items.
+      uploads = contentItems.values().filter(func(i : ContentItem) : Bool { i.isActive }).toArray().size();
       views = totalViews;
       followers = followers.size();
       sales;
