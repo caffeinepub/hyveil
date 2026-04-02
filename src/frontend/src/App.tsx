@@ -258,6 +258,17 @@ const CATEGORIES = [
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("content");
   const [hyvBalance, setHyvBalance] = useState<number>(0);
+  const [oracleStats, setOracleStats] = useState<{
+    cycleCount: bigint;
+    totalMinted: bigint;
+    dailyMintAmount: bigint;
+    cyclesUntilHalving: bigint;
+    hardCap: bigint;
+    channelCount: bigint;
+  } | null>(null);
+  const [myHyvMined, setMyHyvMined] = useState<bigint>(0n);
+  const [leaderboard, setLeaderboard] = useState<Array<[string, bigint]>>([]);
+  const [_oracleLoading, setOracleLoading] = useState(false);
   const { identity, login, clear } = useInternetIdentity();
   const isLoggedIn = !!identity && !identity.getPrincipal().isAnonymous();
   const { actor, isFetching: actorFetching } = useActor();
@@ -331,6 +342,10 @@ export default function App() {
   });
 
   const [myChannels, setMyChannels] = useState<ChannelRevenue[]>([]);
+  // Tracks local monetization model per channel by partnerId string
+  const [monetizationModels, setMonetizationModels] = useState<
+    Record<string, string>
+  >({});
   const [hyveilCyclesBalance, setHyveilCyclesBalance] = useState<bigint | null>(
     null,
   );
@@ -438,19 +453,24 @@ export default function App() {
     // Attempt to claim owner/admin role if no admin has been assigned yet.
     // FIX #7: Log failures instead of silently swallowing them so the first-login
     // admin can know if the claim failed (e.g., actor not ready, network error).
-    actor.claimOwnerIfFirst().catch((e) => {
-      console.warn("claimOwnerIfFirst failed:", e);
-    });
-    // FIX #7b: isCallerAdmin is separated from the main Promise.all so that
-    // a transient failure in admin check doesn't silently zero out all other state.
-    // Both fetch independently; admin defaults to false on error with a console warning.
-    actor
-      .isCallerAdmin()
-      .then(setIsAdmin)
-      .catch((e) => {
+    // Claim owner FIRST (sequential), then check admin status.
+    // Running them concurrently caused a race where isCallerAdmin() resolved
+    // before claimOwnerIfFirst() completed, leaving the first-login owner
+    // without admin features until the next page load.
+    (async () => {
+      try {
+        await actor.claimOwnerIfFirst();
+      } catch (e) {
+        console.warn("claimOwnerIfFirst failed:", e);
+      }
+      try {
+        const result = await actor.isCallerAdmin();
+        setIsAdmin(result);
+      } catch (e) {
         console.warn("isCallerAdmin failed — admin features hidden:", e);
         setIsAdmin(false);
-      });
+      }
+    })();
     Promise.all([
       actor.getRegistrationFee(),
       actor.getMyIcpBalance(),
@@ -553,6 +573,30 @@ export default function App() {
       .getHyvBalance(principal)
       .then((bal: bigint) => setHyvBalance(Number(bal) / 1e8))
       .catch(() => {});
+  }, [actor, isLoggedIn, identity]);
+
+  // Fetch oracle/mining stats when mining tab is active
+  useEffect(() => {
+    if (!actor || !isLoggedIn || !identity) return;
+    setOracleLoading(true);
+    const principal = identity.getPrincipal();
+    Promise.all([
+      (actor as any).getOracleStats?.() ?? Promise.resolve(null),
+      (actor as any).getCreatorMined?.(principal) ?? Promise.resolve(0n),
+      (actor as any).getLeaderboard?.() ?? Promise.resolve([]),
+    ])
+      .then(([stats, mined, board]: [any, bigint, Array<[any, bigint]>]) => {
+        if (stats) setOracleStats(stats);
+        setMyHyvMined(mined ?? 0n);
+        setLeaderboard(
+          (board ?? []).map(([p, amt]: [any, bigint]) => [
+            typeof p === "string" ? p : (p.toText?.() ?? String(p)),
+            amt,
+          ]),
+        );
+      })
+      .catch(() => {})
+      .finally(() => setOracleLoading(false));
   }, [actor, isLoggedIn, identity]);
 
   const fetchChannelContent = async (partnerId: bigint) => {
@@ -810,11 +854,9 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-3">
           {/* Brand */}
           <div className="flex items-center gap-2 shrink-0">
-            <img
-              src="/assets/hyveil-logo.jpg"
-              alt="HYVEIL"
-              className="h-8 w-auto"
-            />
+            <span className="font-display font-bold text-xl tracking-widest gradient-text select-none">
+              HYVEIL
+            </span>
             <span className="hyveil-badge hidden sm:inline">BETA</span>
           </div>
 
@@ -922,13 +964,6 @@ export default function App() {
                     }}
                   />
                   <div className="relative">
-                    <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
-                      <img
-                        src="/assets/hyveil-logo.jpg"
-                        alt="HYVEIL"
-                        className="w-24 h-24 object-contain"
-                      />
-                    </div>
                     <h1 className="font-display font-bold text-6xl md:text-8xl tracking-tight gradient-text mb-4">
                       HYVEIL
                     </h1>
@@ -2881,15 +2916,6 @@ export default function App() {
         {/* MINING TAB */}
         {activeTab === "mining" && (
           <div className="fade-up space-y-6">
-            {/* Pre-launch banner */}
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-300 text-sm">
-              <Pickaxe className="w-4 h-4 shrink-0" />
-              <span>
-                Mining goes live once the HYV token canister is configured by
-                admin. Stats shown are simulated.
-              </span>
-            </div>
-
             <div>
               <h2 className="text-2xl font-display font-bold mb-1 flex items-center gap-2">
                 <Pickaxe className="w-6 h-6 text-amber-400" />
@@ -2900,299 +2926,291 @@ export default function App() {
               </p>
             </div>
 
-            {/* My Mining Stats — logged in only */}
-            {isLoggedIn && (
-              <div>
-                <h3 className="font-display font-semibold mb-3 text-amber-300">
-                  Your Mining Stats
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {/* HYV Balance */}
-                  <div
-                    className="glass-card rounded-2xl p-5 relative overflow-hidden"
-                    data-ocid="mining.hyv_balance.card"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, rgba(251,191,36,0.12) 0%, rgba(245,158,11,0.06) 100%)",
-                      border: "1px solid rgba(251,191,36,0.25)",
-                    }}
-                  >
-                    <div className="absolute top-3 right-3">
-                      <Coins className="w-8 h-8 text-amber-400/20" />
-                    </div>
-                    <p className="text-xs text-amber-400/70 mb-2 uppercase tracking-wider font-medium">
-                      HYV Balance
-                    </p>
-                    <p className="text-3xl font-display font-bold text-amber-300">
-                      {hyvBalance.toFixed(2)}
-                    </p>
-                    <p className="text-xs text-amber-500/60 mt-1">
-                      HYV · HYVEIL Token
-                    </p>
-                  </div>
-
-                  {/* Social Score */}
-                  <div
-                    className="glass-card rounded-2xl p-5 relative overflow-hidden"
-                    data-ocid="mining.social_score.card"
-                  >
-                    <div className="absolute top-3 right-3">
-                      <TrendingUp className="w-8 h-8 text-blue-400/20" />
-                    </div>
-                    <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-medium">
-                      Social Score
-                    </p>
-                    <p className="text-3xl font-display font-bold">342</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      pts today
-                    </p>
-                    <div className="mt-3 space-y-1 text-xs text-muted-foreground/70">
-                      <div className="flex justify-between">
-                        <span>Uploads × 10</span>
-                        <span className="text-blue-300">+30</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Views/100 × 5</span>
-                        <span className="text-blue-300">+125</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Followers × 2</span>
-                        <span className="text-blue-300">+84</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Sales × 15</span>
-                        <span className="text-blue-300">+75</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Subs × 20</span>
-                        <span className="text-blue-300">+28</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Est. Daily Reward */}
-                  <div
-                    className="glass-card rounded-2xl p-5 relative overflow-hidden"
-                    data-ocid="mining.daily_reward.card"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(5,150,105,0.04) 100%)",
-                      border: "1px solid rgba(16,185,129,0.2)",
-                    }}
-                  >
-                    <div className="absolute top-3 right-3">
-                      <Zap className="w-8 h-8 text-emerald-400/20" />
-                    </div>
-                    <p className="text-xs text-emerald-400/70 mb-2 uppercase tracking-wider font-medium">
-                      Est. Daily Reward
-                    </p>
-                    <p className="text-3xl font-display font-bold text-emerald-300">
-                      ~12.4
-                    </p>
-                    <p className="text-xs text-emerald-500/60 mt-1">
-                      HYV today
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/50 mt-2">
-                      342 / 75,482 × 2,739 pool
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {!isLoggedIn && (
-              <div className="glass-card rounded-2xl p-6 text-center border border-amber-500/20">
-                <Pickaxe className="w-10 h-10 text-amber-400/50 mx-auto mb-3" />
-                <p className="font-semibold mb-1">Start Mining HYV</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Log in to see your social score and mining rewards
-                </p>
-                <button
-                  type="button"
-                  onClick={login}
-                  className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-5 py-2 rounded-xl text-sm font-semibold transition-colors"
-                  data-ocid="mining.login.button"
-                >
-                  Connect Identity
-                </button>
-              </div>
-            )}
-
-            {/* Network Stats */}
-            <div>
-              <h3 className="font-display font-semibold mb-3">Network Stats</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* HYV Mined */}
-                <div
-                  className="glass-card rounded-2xl p-5"
-                  data-ocid="mining.network_mined.card"
-                >
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                    HYV Mined
-                  </p>
-                  <p className="text-xl font-display font-bold">1,247,832</p>
-                  <p className="text-xs text-muted-foreground/70 mb-3">
-                    / 21,000,000 cap
-                  </p>
-                  <div className="w-full bg-white/5 rounded-full h-1.5">
-                    <div
-                      className="h-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-300"
-                      style={{ width: "5.94%" }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/50 mt-1">
-                    5.94% of total supply
-                  </p>
-                </div>
-
-                {/* Daily Mint Pool */}
-                <div
-                  className="glass-card rounded-2xl p-5"
-                  data-ocid="mining.daily_pool.card"
-                >
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                    Daily Mint Pool
-                  </p>
-                  <p className="text-xl font-display font-bold text-amber-300">
-                    2,739
-                  </p>
-                  <p className="text-xs text-muted-foreground/70">HYV / day</p>
-                  <p className="text-[10px] text-muted-foreground/50 mt-3">
-                    Epoch 1 · Year 1–4
-                  </p>
-                  <p className="text-[10px] text-amber-500/60 mt-0.5">
-                    Halves every 4 years
-                  </p>
-                </div>
-
-                {/* Next Halving */}
-                <div
-                  className="glass-card rounded-2xl p-5"
-                  data-ocid="mining.halving.card"
-                >
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                    Next Halving
-                  </p>
-                  <p className="text-xl font-display font-bold">1,312</p>
-                  <p className="text-xs text-muted-foreground/70 mb-3">
-                    oracle cycles remaining
-                  </p>
-                  <div className="w-full bg-white/5 rounded-full h-1.5">
-                    <div
-                      className="h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-300"
-                      style={{ width: "10.2%" }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground/50 mt-1">
-                    148 / 1,460 epoch cycles
-                  </p>
-                </div>
-
-                {/* Total Channels */}
-                <div
-                  className="glass-card rounded-2xl p-5"
-                  data-ocid="mining.channels.card"
-                >
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                    Mining Channels
-                  </p>
-                  <p className="text-xl font-display font-bold">48</p>
-                  <p className="text-xs text-muted-foreground/70">
-                    active channels
-                  </p>
-                  <p className="text-[10px] text-emerald-400/60 mt-3 flex items-center gap-1">
-                    <span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                    All earning HYV rewards
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Leaderboard */}
-            <div>
-              <h3 className="font-display font-semibold mb-3">
-                Mining Leaderboard
-              </h3>
+            {/* Zero/empty state when oracle has never run */}
+            {!oracleStats || oracleStats.cycleCount === 0n ? (
               <div
-                className="glass-card rounded-2xl overflow-hidden"
-                data-ocid="mining.leaderboard.table"
+                className="glass-card rounded-2xl p-10 text-center border border-amber-500/15"
+                data-ocid="mining.empty_state"
               >
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-white/5 text-xs text-muted-foreground">
-                        <th className="text-left p-4">Rank</th>
-                        <th className="text-left p-4">Channel</th>
-                        <th className="text-right p-4">HYV Mined</th>
-                        <th className="text-right p-4">Social Score</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        {
-                          rank: 1,
-                          channel: "TechVibes",
-                          mined: 48320,
-                          score: 9840,
-                          medal: "🥇",
-                        },
-                        {
-                          rank: 2,
-                          channel: "CryptoDaily",
-                          mined: 41255,
-                          score: 8612,
-                          medal: "🥈",
-                        },
-                        {
-                          rank: 3,
-                          channel: "ICP_Insider",
-                          mined: 37890,
-                          score: 7943,
-                          medal: "🥉",
-                        },
-                        {
-                          rank: 4,
-                          channel: "Web3Creators",
-                          mined: 29140,
-                          score: 6210,
-                          medal: null,
-                        },
-                        {
-                          rank: 5,
-                          channel: "NovaMuse",
-                          mined: 21600,
-                          score: 4588,
-                          medal: null,
-                        },
-                      ].map((entry, i) => (
-                        <tr
-                          key={entry.channel}
-                          className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
-                          data-ocid={`mining.leaderboard.item.${i + 1}`}
-                        >
-                          <td className="p-4 font-mono text-xs text-muted-foreground">
-                            {entry.medal ? (
-                              <span>{entry.medal}</span>
-                            ) : (
-                              <span className="text-muted-foreground/50">
-                                #{entry.rank}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-4 font-medium">{entry.channel}</td>
-                          <td className="p-4 text-right font-mono text-amber-300">
-                            {entry.mined.toLocaleString()}
-                          </td>
-                          <td className="p-4 text-right font-mono text-blue-300">
-                            {entry.score.toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <Pickaxe className="w-12 h-12 text-amber-400/30 mx-auto mb-4" />
+                <p className="text-lg font-semibold text-foreground mb-2">
+                  Mining Not Active Yet
+                </p>
+                <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+                  Timestamps and rewards will appear once the first oracle cycle
+                  runs. Deploy the HYV token system from the admin dashboard to
+                  activate mining.
+                </p>
+                {!isLoggedIn && (
+                  <button
+                    type="button"
+                    onClick={login}
+                    className="mt-6 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-5 py-2 rounded-xl text-sm font-semibold transition-colors"
+                    data-ocid="mining.login.button"
+                  >
+                    Connect Identity
+                  </button>
+                )}
               </div>
-            </div>
+            ) : (
+              <>
+                {/* My Mining Stats — logged in only */}
+                {isLoggedIn && (
+                  <div>
+                    <h3 className="font-display font-semibold mb-3 text-amber-300">
+                      Your Mining Stats
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* HYV Balance */}
+                      <div
+                        className="glass-card rounded-2xl p-5 relative overflow-hidden"
+                        data-ocid="mining.hyv_balance.card"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, rgba(251,191,36,0.12) 0%, rgba(245,158,11,0.06) 100%)",
+                          border: "1px solid rgba(251,191,36,0.25)",
+                        }}
+                      >
+                        <div className="absolute top-3 right-3">
+                          <Coins className="w-8 h-8 text-amber-400/20" />
+                        </div>
+                        <p className="text-xs text-amber-400/70 mb-2 uppercase tracking-wider font-medium">
+                          HYV Balance
+                        </p>
+                        <p className="text-3xl font-display font-bold text-amber-300">
+                          {hyvBalance.toFixed(2)}
+                        </p>
+                        <p className="text-xs text-amber-500/60 mt-1">
+                          HYV · HYVEIL Token
+                        </p>
+                      </div>
+
+                      {/* My Total Mined */}
+                      <div
+                        className="glass-card rounded-2xl p-5 relative overflow-hidden"
+                        data-ocid="mining.my_mined.card"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(5,150,105,0.04) 100%)",
+                          border: "1px solid rgba(16,185,129,0.2)",
+                        }}
+                      >
+                        <div className="absolute top-3 right-3">
+                          <Zap className="w-8 h-8 text-emerald-400/20" />
+                        </div>
+                        <p className="text-xs text-emerald-400/70 mb-2 uppercase tracking-wider font-medium">
+                          Total HYV Mined
+                        </p>
+                        <p className="text-3xl font-display font-bold text-emerald-300">
+                          {(Number(myHyvMined) / 1e8).toFixed(4)}
+                        </p>
+                        <p className="text-xs text-emerald-500/60 mt-1">
+                          HYV earned via social work
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Network Stats */}
+                <div>
+                  <h3 className="font-display font-semibold mb-3">
+                    Network Stats
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {/* HYV Mined */}
+                    <div
+                      className="glass-card rounded-2xl p-5"
+                      data-ocid="mining.network_mined.card"
+                    >
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                        HYV Mined
+                      </p>
+                      <p className="text-xl font-display font-bold">
+                        {(Number(oracleStats.totalMinted) / 1e8).toLocaleString(
+                          undefined,
+                          { maximumFractionDigits: 2 },
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground/70 mb-3">
+                        / 21,000,000 cap
+                      </p>
+                      <div className="w-full bg-white/5 rounded-full h-1.5">
+                        <div
+                          className="h-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-300"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              (Number(oracleStats.totalMinted) /
+                                Number(oracleStats.hardCap)) *
+                                100,
+                            ).toFixed(2)}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground/50 mt-1">
+                        {(
+                          (Number(oracleStats.totalMinted) /
+                            Number(oracleStats.hardCap)) *
+                          100
+                        ).toFixed(2)}
+                        % of total supply
+                      </p>
+                    </div>
+
+                    {/* Daily Mint Pool */}
+                    <div
+                      className="glass-card rounded-2xl p-5"
+                      data-ocid="mining.daily_pool.card"
+                    >
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                        Daily Mint Pool
+                      </p>
+                      <p className="text-xl font-display font-bold text-amber-300">
+                        {(
+                          Number(oracleStats.dailyMintAmount) / 1e8
+                        ).toLocaleString(undefined, {
+                          maximumFractionDigits: 2,
+                        })}
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">
+                        HYV / day
+                      </p>
+                      <p className="text-[10px] text-amber-500/60 mt-3">
+                        Halves every 4 years
+                      </p>
+                    </div>
+
+                    {/* Next Halving */}
+                    <div
+                      className="glass-card rounded-2xl p-5"
+                      data-ocid="mining.halving.card"
+                    >
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                        Next Halving
+                      </p>
+                      <p className="text-xl font-display font-bold">
+                        {Number(
+                          oracleStats.cyclesUntilHalving,
+                        ).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-muted-foreground/70 mb-3">
+                        oracle cycles remaining
+                      </p>
+                      <div className="w-full bg-white/5 rounded-full h-1.5">
+                        <div
+                          className="h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-300"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              ((1460 - Number(oracleStats.cyclesUntilHalving)) /
+                                1460) *
+                                100,
+                            ).toFixed(1)}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground/50 mt-1">
+                        Cycle {Number(oracleStats.cycleCount)} / 1,460 epoch
+                      </p>
+                    </div>
+
+                    {/* Total Channels */}
+                    <div
+                      className="glass-card rounded-2xl p-5"
+                      data-ocid="mining.channels.card"
+                    >
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                        Mining Channels
+                      </p>
+                      <p className="text-xl font-display font-bold">
+                        {Number(oracleStats.channelCount)}
+                      </p>
+                      <p className="text-xs text-muted-foreground/70">
+                        active channels
+                      </p>
+                      <p className="text-[10px] text-emerald-400/60 mt-3 flex items-center gap-1">
+                        <span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                        All earning HYV rewards
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Leaderboard */}
+                <div>
+                  <h3 className="font-display font-semibold mb-3">
+                    Mining Leaderboard
+                  </h3>
+                  <div
+                    className="glass-card rounded-2xl overflow-hidden"
+                    data-ocid="mining.leaderboard.table"
+                  >
+                    {leaderboard.length === 0 ? (
+                      <div
+                        className="p-8 text-center text-muted-foreground text-sm"
+                        data-ocid="mining.leaderboard.empty_state"
+                      >
+                        No miners yet
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-white/5 text-xs text-muted-foreground">
+                              <th className="text-left p-4">Rank</th>
+                              <th className="text-left p-4">Principal</th>
+                              <th className="text-right p-4">HYV Mined</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {leaderboard
+                              .slice()
+                              .sort((a, b) =>
+                                Number(b[1]) - Number(a[1]) > 0
+                                  ? 1
+                                  : Number(b[1]) - Number(a[1]) < 0
+                                    ? -1
+                                    : 0,
+                              )
+                              .map(([principal, mined], i) => {
+                                const medals = ["🥇", "🥈", "🥉"];
+                                const shortPrincipal = `${principal.slice(0, 10)}...${principal.slice(-4)}`;
+                                return (
+                                  <tr
+                                    key={principal}
+                                    className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                                    data-ocid={`mining.leaderboard.item.${i + 1}`}
+                                  >
+                                    <td className="p-4 font-mono text-xs text-muted-foreground">
+                                      {i < 3 ? (
+                                        <span>{medals[i]}</span>
+                                      ) : (
+                                        <span className="text-muted-foreground/50">
+                                          #{i + 1}
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="p-4 font-mono text-xs">
+                                      {shortPrincipal}
+                                    </td>
+                                    <td className="p-4 text-right font-mono text-amber-300">
+                                      {(Number(mined) / 1e8).toLocaleString(
+                                        undefined,
+                                        { maximumFractionDigits: 4 },
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* HYV Token Info */}
             <div className="glass-card rounded-2xl p-5 border border-amber-500/15">
@@ -3237,13 +3255,16 @@ export default function App() {
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs mb-1">Status</p>
-                  <p className="font-semibold text-amber-400">Pre-launch</p>
+                  <p className="font-semibold text-amber-400">
+                    {oracleStats && oracleStats.cycleCount > 0n
+                      ? "Live"
+                      : "Pre-launch"}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
         )}
-
         {/* REVENUE TAB */}
         {activeTab === "revenue" && (
           <div className="fade-up space-y-6">
@@ -3896,19 +3917,29 @@ export default function App() {
                               PPV
                             </span>
                             <Switch
-                              checked={false}
+                              checked={
+                                (monetizationModels[ch.partnerId.toString()] ??
+                                  "pay-per-view") === "subscription"
+                              }
                               onCheckedChange={(checked) => {
                                 if (actor) {
+                                  const newModel = checked
+                                    ? "subscription"
+                                    : "pay-per-view";
                                   actor
                                     .setMonetizationModel(
                                       ch.partnerId,
-                                      checked ? "subscription" : "pay-per-view",
+                                      newModel,
                                     )
-                                    .then(() =>
+                                    .then(() => {
                                       toast.success(
                                         "Monetization model updated",
-                                      ),
-                                    )
+                                      );
+                                      setMonetizationModels((prev) => ({
+                                        ...prev,
+                                        [ch.partnerId.toString()]: newModel,
+                                      }));
+                                    })
                                     .catch(() =>
                                       toast.error("Failed to update model"),
                                     );
@@ -4209,22 +4240,22 @@ export default function App() {
               {[
                 {
                   label: "Total Partners",
-                  value: partners.length,
+                  value: onChainPartners.length,
                   icon: <Building2 className="w-4 h-4 text-blue-400" />,
                 },
                 {
                   label: "Total Channels",
-                  value: partners.length,
+                  value: onChainPartners.length,
                   icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
                 },
                 {
                   label: "Partner Volume",
-                  value: `${partners.reduce((s, p) => s + p.monthlyVolume, 0).toFixed(2)} ICP`,
+                  value: "—",
                   icon: <TrendingUp className="w-4 h-4 text-cyan-400" />,
                 },
                 {
                   label: "Partners Earned",
-                  value: `${partners.reduce((s, p) => s + p.earned, 0).toFixed(3)} ICP`,
+                  value: "—",
                   icon: <Coins className="w-4 h-4 text-amber-400" />,
                 },
               ].map((stat, i) => (

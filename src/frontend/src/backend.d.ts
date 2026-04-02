@@ -181,4 +181,7 @@ export interface backendInterface {
     topUpPartnerCanister(partnerId: bigint): Promise<void>;
     deployTokenSystem(): Promise<{ tokenCanisterId: Principal; oracleCanisterId: Principal }>;
     getTokenSystemStatus(): Promise<{ tokenDeployed: boolean; oracleDeployed: boolean; tokenCanisterId: Principal | null; oracleCanisterId: Principal | null; tokenWasmLoaded: boolean; oracleWasmLoaded: boolean }>;
+    getOracleStats(): Promise<{ cycleCount: bigint; totalMinted: bigint; dailyMintAmount: bigint; cyclesUntilHalving: bigint; hardCap: bigint; channelCount: bigint }>;
+    getCreatorMined(creator: Principal): Promise<bigint>;
+    getLeaderboard(): Promise<Array<[Principal, bigint]>>;
 }
