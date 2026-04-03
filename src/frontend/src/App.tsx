@@ -448,36 +448,34 @@ export default function App() {
   }, [actor]);
 
   // Fetch on-chain data when logged in
+  // BUG FIX: Run claimOwnerIfFirst → isCallerAdmin sequentially first, then
+  // use local adminResult (not stale closure) to conditionally fetch admin data.
   useEffect(() => {
     if (!actor || !isLoggedIn) return;
-    // Attempt to claim owner/admin role if no admin has been assigned yet.
-    // FIX #7: Log failures instead of silently swallowing them so the first-login
-    // admin can know if the claim failed (e.g., actor not ready, network error).
-    // Claim owner FIRST (sequential), then check admin status.
-    // Running them concurrently caused a race where isCallerAdmin() resolved
-    // before claimOwnerIfFirst() completed, leaving the first-login owner
-    // without admin features until the next page load.
     (async () => {
+      // Step 1: Claim owner then check admin — sequential to avoid race condition
+      let adminResult = false;
       try {
         await actor.claimOwnerIfFirst();
       } catch (e) {
         console.warn("claimOwnerIfFirst failed:", e);
       }
       try {
-        const result = await actor.isCallerAdmin();
-        setIsAdmin(result);
+        adminResult = await actor.isCallerAdmin();
+        setIsAdmin(adminResult);
       } catch (e) {
         console.warn("isCallerAdmin failed — admin features hidden:", e);
         setIsAdmin(false);
       }
-    })();
-    Promise.all([
-      actor.getRegistrationFee(),
-      actor.getMyIcpBalance(),
-      actor.getMyPartners(),
-      actor.getPartners().catch(() => [] as PartnerRecord[]),
-    ])
-      .then(([fee, bal, myP, allP]) => {
+
+      // Step 2: Fetch base data using parallel calls
+      try {
+        const [fee, bal, myP, allP] = await Promise.all([
+          actor.getRegistrationFee(),
+          actor.getMyIcpBalance(),
+          actor.getMyPartners(),
+          actor.getPartners().catch(() => [] as PartnerRecord[]),
+        ]);
         setRegistrationFee(fee);
         setMyIcpDeposit(bal);
         setMyPartners(myP);
@@ -494,22 +492,28 @@ export default function App() {
             })
             .catch(() => {});
         }
-        if (isAdmin) {
-          // Fetch WASM status and HYVEIL principal for admin
-          (actor as any)
-            .getChannelWasmStatus?.()
-            .then((s: any) => setWasmStatus(s))
-            .catch(() => {});
-          (actor as any)
-            .getHyveilPrincipal?.()
-            .then((p: any) => {
-              if (p && p.length > 0) setStoredHyveilPrincipal(p[0].toString());
-            })
-            .catch(() => {});
+      } catch (e) {
+        console.warn("Base data fetch failed:", e);
+      }
+
+      // Step 3: Admin-only data — uses local adminResult (not stale state)
+      if (adminResult) {
+        try {
+          const s = await (actor as any).getChannelWasmStatus?.();
+          setWasmStatus(s ?? { loaded: false, size: 0 });
+        } catch (e) {
+          console.warn("getChannelWasmStatus failed:", e);
+          setWasmStatus({ loaded: false, size: 0 });
         }
-      })
-      .catch(() => {});
-  }, [actor, isLoggedIn, isAdmin]);
+        try {
+          const p = await (actor as any).getHyveilPrincipal?.();
+          if (p && p.length > 0) setStoredHyveilPrincipal(p[0].toString());
+        } catch (e) {
+          console.warn("getHyveilPrincipal failed:", e);
+        }
+      }
+    })();
+  }, [actor, isLoggedIn]);
 
   const refreshMyBalance = async () => {
     if (!actor) return;
@@ -523,16 +527,19 @@ export default function App() {
     actor
       .getMyChannelsRevenue()
       .then(setMyChannels)
-      .catch(() => {});
+      .catch((e) => console.warn("getMyChannelsRevenue failed:", e));
     if (isAdmin) {
       actor
         .getAllPartnersRevenue()
         .then(setPlatformRevenue)
-        .catch(() => {});
+        .catch((e) => console.warn("getAllPartnersRevenue failed:", e));
       (actor as any)
         .getHyveilCyclesBalance?.()
-        .then((bal: bigint) => setHyveilCyclesBalance(bal))
-        .catch(() => {});
+        .then((bal: bigint) => setHyveilCyclesBalance(bal != null ? bal : 0n))
+        .catch((e: any) => {
+          console.warn("getHyveilCyclesBalance failed:", e);
+          setHyveilCyclesBalance(0n);
+        });
       (actor as any)
         .getTokenSystemStatus?.()
         .then((s: any) => {
@@ -547,21 +554,57 @@ export default function App() {
                 ? s.oracleCanisterId.toString()
                 : null,
             });
+          } else {
+            setTokenSystemStatus({
+              tokenDeployed: false,
+              oracleDeployed: false,
+              tokenCanisterId: null,
+              oracleCanisterId: null,
+            });
           }
         })
-        .catch(() => {});
+        .catch((e: any) => {
+          console.warn("getTokenSystemStatus failed:", e);
+          setTokenSystemStatus({
+            tokenDeployed: false,
+            oracleDeployed: false,
+            tokenCanisterId: null,
+            oracleCanisterId: null,
+          });
+        });
       (actor as any)
         .getAutoRefillStatus?.()
         .then((s: any) => {
-          if (s) setAutoRefillStatus(s);
+          if (s) {
+            setAutoRefillStatus(s);
+          } else {
+            setAutoRefillStatus({
+              lastRefillTime: 0n,
+              totalRefillCount: 0n,
+              oracleCycles: 0n,
+              tokenCycles: 0n,
+              refillThreshold: 1_000_000_000n,
+              refillTarget: 1_000_000_000_000n,
+            });
+          }
         })
-        .catch(() => {});
+        .catch((e: any) => {
+          console.warn("getAutoRefillStatus failed:", e);
+          setAutoRefillStatus({
+            lastRefillTime: 0n,
+            totalRefillCount: 0n,
+            oracleCycles: 0n,
+            tokenCycles: 0n,
+            refillThreshold: 1_000_000_000n,
+            refillTarget: 1_000_000_000_000n,
+          });
+        });
       (actor as any)
         .getCachedIcpXdrRate?.()
         .then((r: any) => {
           if (r) setCmcRate(r.xdrPermyriadPerIcp);
         })
-        .catch(() => {});
+        .catch((e: any) => console.warn("getCachedIcpXdrRate failed:", e));
     }
   }, [isLoggedIn, actor, isAdmin]);
 
@@ -1002,11 +1045,11 @@ export default function App() {
                 <div className="flex items-center gap-6 text-sm text-muted-foreground/50">
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />{" "}
-                    9 ICP dApps
+                    Privacy-first browser
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />{" "}
-                    Privacy-first
+                    ICP-powered
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-cyan-500" />{" "}
@@ -1620,7 +1663,7 @@ export default function App() {
                       <Code2 className="w-4 h-4 text-blue-400" />
                       Channel WASM Status
                     </h3>
-                    {wasmStatus === null ? (
+                    {wasmStatus == null ? (
                       <div className="glass-card rounded-2xl p-4 flex items-center gap-3">
                         <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
                         <span className="text-sm text-muted-foreground">
@@ -1637,8 +1680,11 @@ export default function App() {
                               const s = await (
                                 actor as any
                               ).getChannelWasmStatus?.();
-                              if (s) setWasmStatus(s);
-                            } catch {}
+                              setWasmStatus(s ?? { loaded: false, size: 0 });
+                            } catch (e) {
+                              console.warn("getChannelWasmStatus failed:", e);
+                              setWasmStatus({ loaded: false, size: 0 });
+                            }
                             setWasmStatusLoading(false);
                           }}
                           data-ocid="dashboard.wasm.refresh.button"
@@ -1710,8 +1756,11 @@ export default function App() {
                               const s = await (
                                 actor as any
                               ).getChannelWasmStatus?.();
-                              if (s) setWasmStatus(s);
-                            } catch {}
+                              setWasmStatus(s ?? { loaded: false, size: 0 });
+                            } catch (e) {
+                              console.warn("getChannelWasmStatus failed:", e);
+                              setWasmStatus({ loaded: false, size: 0 });
+                            }
                             setWasmStatusLoading(false);
                           }}
                           data-ocid="dashboard.wasm.refresh.button"
@@ -3759,7 +3808,6 @@ export default function App() {
                         {myChannels.map((ch, idx) => {
                           const cidStr = ch.canisterId.toString();
                           const shortCid = `${cidStr.slice(0, 8)}...${cidStr.slice(-4)}`;
-                          const mockFollowers = Math.floor(100 + idx * 37 + 12);
                           return (
                             <tr
                               key={cidStr}
@@ -3804,8 +3852,7 @@ export default function App() {
                               </td>
                               <td className="px-4 py-3 text-right text-xs text-muted-foreground">
                                 <div className="flex items-center justify-end gap-1">
-                                  <Users className="w-3 h-3" />
-                                  {mockFollowers}
+                                  <Users className="w-3 h-3" />—
                                 </div>
                               </td>
                               <td className="px-4 py-3 text-right">
